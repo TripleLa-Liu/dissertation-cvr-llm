@@ -268,6 +268,13 @@ Checked whether anything would actually block a GitHub push or a from-scratch ex
 - `degree_distribution_scan_test.py` — the one missing script (see above); doesn't block anything currently in the repo since its sole output (`aliccp_degree_counters_test.pkl`) already exists as data, but a fully from-scratch clone-and-run (no migrated data) can't regenerate it without this file.
 - `data/README.md` (Ali-CCP/Criteo download instructions) — still `[planned]`, never written.
 
+### Folder cleanup + git repair (2026-07-30, same pass)
+
+- Deleted 9.2GB of redundant raw-data backups (`Dataset/6.29/sample_train.tar.gz` + `sample_test.tar.gz` + `.md5` files) — same Ali-CCP data already exists extracted and integrity-checked in the separate `Datasets/` folder; not git-tracked, not read by any script.
+- Deleted a corrupt 45-byte `Criteo_Conversion_Search.tar.gz` stub (failed/incomplete download remnant) — the real ~6GB extracted `CriteoSearchData` file was already present and intact.
+- **`.git` was broken** — `objects/` directory was entirely missing (repo could not run `git status`/`log`/etc). Ran `git init` (safe/idempotent, preserved existing `config`/remote), discovered the actual GitHub default branch is `main` (local was misconfigured to track a nonexistent `master`), fixed the branch tracking, fetched `origin/main`, and committed all recovered code + updated README on top of it (55 files, local `main` now 1 commit ahead of `origin/main`, working tree clean). **Not yet pushed** — ready whenever you want to run `git push`.
+- Repo size: 15GB → 6.1GB after cleanup (raw `Dataset/Criteo_Conversion_Search/` extracted TSV, ~6GB, is the only large item left, correctly gitignored).
+
 ---
 
 ## Open Questions for Supervisor
