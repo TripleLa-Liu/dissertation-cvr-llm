@@ -76,6 +76,8 @@ Note: the initial 2026-07-15 pass used the first 500K rows of the file directly,
 
 Charts: `aliccp_eda.png` (original biased sample, kept for record), `aliccp_eda_unbiased.png` (corrected). Scripts: `aliccp_eda_raw.py` (format parser + sniff), `full_scan_chunk.py` (resumable exact full-file scan + reservoir sampler — the definitive method going forward for any rate statistic on this file).
 
+> **Correction (2026-07-2x, per migration notes — not independently re-verified in this session):** the post-click CVR figure above (0.5493%) was computed with a bug — it divided all purchase rows by all click rows instead of restricting to purchases *within clicked rows*. Fixed definition: purchase-rows-among-clicked-rows / clicked-rows. Corrected full-population CVR = **0.5353%**. The fix was applied across 4 scripts, but those script versions were not migrated to this repo copy (see "Known gaps" below) — treat 0.5493% in this table as superseded pending re-verification.
+
 ### Preprocessing: k-core filtering (finalised 2026-07-15)
 
 Goal was a modelling-ready subset in the ~2-5M interaction range. Exact degree counts (`degree_distribution_scan.py`, one full pass, item_id + common_feature_index counters) showed items are long-tailed on the *low* end (42.6% appear once) while sessions/common_feature_index are long-tailed on the *high* end (only 1.2% appear once, mean 57.9 rows/session) — so session degree, not item degree, is the real lever for row-count control.
@@ -93,7 +95,38 @@ Goal was a modelling-ready subset in the ~2-5M interaction range. Exact degree c
 
 Scripts: `degree_distribution_scan.py` (exact full-file item/session degree counters), `check_session_thresholds.py` (fast marginal-threshold lookup from the saved counters, no rescan), `filter_and_join.py` (applies K_ITEM/K_SESSION, joins user_id from common_features). Output: `aliccp_filtered_joined.csv` — columns `sample_id, click, purchase, common_feature_index, item_id, user_id`.
 
-**Known gap**: the filtered/joined file currently carries only scalar IDs (item_id, user_id), not the full categorical feature blob — a follow-up pass will need to re-extract the richer field values (from both skeleton and common_features) for the qualifying rows/sessions to build the text descriptions the LLM encoder needs.
+**Resolved (was "known gap" as of 2026-07-15):** the filtered/joined file initially carried only scalar IDs. A follow-up pass re-extracted the richer categorical field values from both skeleton and common_features for the qualifying rows/sessions, and built template-based "pseudo-text" descriptions for the LLM encoder (see Feature Extraction subsection below). **Core limitation carried forward**: all Ali-CCP fields are anonymised numeric IDs with no public decode table, so pseudo-text is templated (`"This item's category is category_8314904, shop is shop_8702354..."`) rather than real natural language — it cannot test whether an LLM's pretrained world knowledge helps, only whether frozen sentence-embedding geometry over templated categorical text helps. Whether to bring in a second, real-text dataset (e.g. Amazon Reviews / MIND) to isolate this is still an open question for the supervisor (see "Open Questions" below).
+
+### Official train/val/test split (supersedes the k-core section above)
+
+The k-core filtering above was re-run against Ali-CCP's **official train/test file split** (not a random split), so all downstream numbers use official test data, not held-out train data:
+
+| Split | Rows | Source |
+|---|---|---|
+| Train pool (post k-core) | 3,249,246 | `aliccp_filtered_joined.csv` |
+| Train | 2,928,363 | `aliccp_train_split.csv` — 90% of train pool, split by session |
+| Val | 320,883 | `aliccp_val_split.csv` — 10% of train pool, split by session |
+| Test | 2,006,347 | `aliccp_test_filtered_joined.csv` — official `sample_test` file, same K_ITEM/K_SESSION filter applied independently, includes an `is_cold_start_item` flag |
+
+Same K_ITEM=50 / K_SESSION=200 thresholds as above. Scripts that produced these splits are not present in this repo copy (see "Known gaps" below); data files are in `migration_package/processed_data/`.
+
+### Filtering distortion check (finalised)
+
+Two-proportion z-test on whether k-core filtering distorts the label distributions relative to the unbiased 50K reservoir sample:
+
+- **CTR**: real, statistically significant difference — filtered subset CTR is ~17% relatively lower than the full population, because k-core selects on session activity and highly active sessions have inherently lower CTR.
+- **CVR (post-click)** — the dissertation's actual target metric — **no significant difference** between filtered and unfiltered populations.
+
+Conclusion: k-core filtering does not distort the metric this dissertation optimises for. Script: `data/preprocessing/confirm_filtering_no_distortion.py` (not present in this repo copy — see "Known gaps").
+
+### Feature extraction & LLM pseudo-text
+
+Full categorical features (category, shop, intention node, brand, etc.) extracted for items and users in the qualifying train+test rows, templated into pseudo-text strings for embedding:
+
+- `item_pseudo_text.csv` — 663,474 items
+- `user_pseudo_text.csv` — 12,065 users
+
+Example: `"This item's category is category_8314904, shop is shop_8702354, intention node is intention_node_9098377, brand is brand_9345479."`
 
 **Secondary: Criteo Conversion Log** — 16M clicks, 30-day window with real delay timestamps (used for delayed feedback benchmarking).
 
@@ -144,9 +177,141 @@ Scripts: `degree_distribution_scan.py` (exact full-file item/session degree coun
 
 ---
 
+## Modelling Results (as of 2026-07-29, from migration_package data — scripts not present in this repo copy)
+
+### Baseline: ESMM (ID-embedding two-tower)
+
+Working baseline chosen from the literature list above. Test set = official Ali-CCP test split (2,006,347 rows).
+
+| Metric | Val | Test overall | Test seen items | Test cold-start items |
+|---|---|---|---|---|
+| CTR-AUC | 0.6328 | 0.5630 | 0.5759 | 0.5375 |
+| CVR-AUC (post-click) | 0.5654 | 0.5260 | 0.5375 | 0.5315 |
+| **CTCVR-AUC** | 0.6243 | **0.5610** | 0.5713 | 0.5557 |
+
+Checkpoint + vocab retained in `migration_package/processed_data/baseline_results/`.
+
+### V1 / V1-Full: frozen MiniLM pseudo-text embeddings replacing ID embeddings
+
+V1 = item-only text embedding; V1-Full = item + user text embeddings. Both replace ID embeddings entirely.
+
+| Model | Test CTCVR-AUC | vs. baseline (0.5610) |
+|---|---|---|
+| V1 (item-only) | 0.5287 | lower |
+| V1-Full (item+user) | 0.5124 | lower |
+
+Both underperform the ID baseline — replacing ID embeddings with frozen text embeddings loses fine-grained memorisation capacity that IDs provide.
+
+### V2: RLMRec-style alignment (ID embeddings retained + contrastive alignment to text)
+
+| Model | Test CTCVR-AUC | vs. baseline |
+|---|---|---|
+| V2 | 0.5561 | ~parity (only LLM variant not clearly below baseline) |
+
+### Candidate encoder shortlist (for possible MiniLM replacement)
+
+MPNet, BGE, E5, GTE, EmbeddingGemma shortlisted as sentence-embedding alternatives to MiniLM. XLNet evaluated and ruled out as unsuitable for direct sentence-embedding use. MPNet re-run of V2 not yet done.
+
+### Test-set difficulty segmentation (context-length × cold-start, 2×2)
+
+Ali-CCP has no timestamps, so "prediction horizon" was reinterpreted as **session interaction count** (long_context ≥ median vs. short_context < median), crossed with seen/cold-start item status. Four models evaluated across all four cells (`context_segment_eval_results.json`).
+
+**Key finding — a crossover**: V2 is the strongest model overall, but in the hardest cell, **short-context + cold-start** (418,643 rows, ~20.9% of test set), V1 (0.5627) and V1-Full (0.5564) both beat V2 (0.4991) and baseline (0.5413):
+
+| Model | short_context & cold_start CTCVR-AUC |
+|---|---|
+| Baseline | 0.5413 |
+| V1 | **0.5627** |
+| V1-Full | 0.5564 |
+| V2 | 0.4991 |
+
+Open question (see below): worth building a hybrid V3 that routes to V1-style embeddings specifically for this segment, or keep as a Discussion-section observation.
+
+### Overleaf preparation
+
+`docs/references.bib` (11 core citations + 3 embedding-model citations) and `docs/methods_results_draft.tex` (paste-ready Methods/Results draft) were prepared but not yet pasted into the Overleaf project, and are not present in this repo copy (see "Known gaps").
+
+---
+
+## Known Gaps in This Repo Copy (updated 2026-07-30, second `code_for_github` sync)
+
+This `Dissertation` folder was a **2026-07-15 snapshot** (code only through k-core filtering). Two `code_for_github` drops have since supplied nearly the full modelling pipeline, now copied into `data/preprocessing/`, `src/baselines/`, `src/models/`, `src/`, `docs/`. Every file was read and cross-checked against the verified result numbers (not copied blind):
+
+**Recovered and verified consistent with the numbers in "Modelling Results":**
+- `data/preprocessing/confirm_filtering_no_distortion.py` — hardcoded `FULL_PURCHASE_AMONG_CLICK = 8_802` reproduces CVR_full = 0.5353%
+- `data/preprocessing/split_train_val.py` — session-level 90/10 split, seed=42; matches `aliccp_train_split.csv`/`aliccp_val_split.csv` row counts
+- `data/preprocessing/filter_test_and_join.py` — asymmetric test filtering (item whitelist inherited from train, session threshold recomputed on test), writes `is_cold_start_item`; matches test row count (2,006,347) and the 42.86% cold-start figure in `methods_results_draft.tex`
+- `data/preprocessing/extract_item_pseudo_text.py` / `extract_user_pseudo_text.py` — template builder matches the exact pseudo-text format seen in `item_pseudo_text.csv`/`user_pseudo_text.csv`; field mapping (206=category, 207=shop, 210=intention_node, 216=brand; 121/122/124-129=user demographics) matches `profile_raw_fields.py`'s hypotheses
+- `data/preprocessing/profile_raw_fields.py` — reservoir-sampling field profiler behind the pseudo-text field choices (prints only, no persisted output)
+- `data/preprocessing/build_test_difficulty_segments.py` — median-split by session interaction count; printed segment sizes (long_context n=1,012,202, short_context n=994,145, and all 4 crossed cells) match `context_segment_eval_results.json` exactly
+- `src/eval_context_segments.py` — the script that produced `context_segment_eval_results.json`; segment-breakdown logic matches the 2×2 matrix reported above
+- `src/baselines/id_embedding_baseline.py`, `src/models/llm_encoder_v1.py` / `llm_encoder_v1_full.py` / `llm_encoder_v2_aligned.py`, `docs/references.bib`, `docs/methods_results_draft.tex` — as previously verified
+
+**Still missing (one script):**
+- `degree_distribution_scan_test.py` — referenced in `filter_test_and_join.py`'s docstring as "STEP 1" (produces `aliccp_degree_counters_test.pkl`, which we do have as a data file). Likely a near-duplicate of `degree_distribution_scan.py` applied to the test file, but not delivered in either `code_for_github` drop — worth locating for completeness, though the pipeline is reproducible without it since its one output file already exists.
+
+**Not scripts — expected to be regenerated, not migrated (per `MIGRATION_NOTES.md`):**
+- V1 / V1-Full / V2 checkpoints and frozen embedding caches (`v1_results/`, `v1_full_results/`, `v2_results/`) — `src/eval_context_segments.py` expects these to exist; rerun `llm_encoder_v1.py` / `llm_encoder_v1_full.py` / `llm_encoder_v2_aligned.py` locally (GPU, a few minutes each) to produce them before `eval_context_segments.py` can run
+
+The GitHub remote (`TripleLa-Liu/dissertation-cvr-llm`) is still stale — only 3 commits, README-only. Worth pushing this recovered pipeline once `degree_distribution_scan_test.py` is found and the checkpoints are regenerated.
+
+**Pipeline is now essentially reproducible end-to-end** from raw Ali-CCP files (in `Datasets/`) through to the context-segment evaluation, modulo the one missing helper script and the intentionally-not-migrated checkpoints.
+
+### Repo-hygiene fixes (2026-07-30, this pass)
+
+Checked whether anything would actually block a GitHub push or a from-scratch experiment re-run (not just "is a script physically present"). Found and fixed:
+- **`requirements.txt` was missing `sentence-transformers`** — `llm_encoder_v1.py`/`v1_full.py`/`v2_aligned.py` all import it; anyone following requirements.txt as-is would hit an ImportError on the V1/V1-Full/V2 scripts. Added.
+- **`.gitignore` didn't exclude model checkpoints** — `*.pt`/`*.pth` and the `baseline_results/`, `v1_results/`, `v1_full_results/`, `v2_results/` output directories (the latter three ~2GB each once regenerated locally) were untracked-but-not-ignored, which would either bloat a `git add .` or hit GitHub's file-size limits. Added, along with `migration_package/processed_data/` (already 910MB of migrated data, shouldn't go into git either).
+- **Two stray junk files removed**: `.gitignore_test_DELETE_ME` (a leftover debug file, content was literally `"test"`) and `.git/config.lock.orphan` (a 0-byte stray lock file from an interrupted git operation) — both deleted from disk, and the now-redundant gitignore entry for the former removed.
+
+**Still open (not code-blocking, but noted for completeness):**
+- `degree_distribution_scan_test.py` — the one missing script (see above); doesn't block anything currently in the repo since its sole output (`aliccp_degree_counters_test.pkl`) already exists as data, but a fully from-scratch clone-and-run (no migrated data) can't regenerate it without this file.
+- `data/README.md` (Ali-CCP/Criteo download instructions) — still `[planned]`, never written.
+
+---
+
+## Open Questions for Supervisor
+
+- Bring in a second, real-text dataset (e.g. Amazon Reviews / MIND) to isolate RQ1's text-vs-ID question, or accept the Ali-CCP templated-pseudo-text limitation and continue?
+- Turn the short-context+cold-start crossover (V1/V1-Full > V2) into a hybrid V3, or keep it as a Discussion-section observation?
+- The "multi-dataset × multi-model" evaluation matrix hasn't started — depends on the first question above.
+- MPNet-for-MiniLM V2 re-run — not done yet, time-permitting.
+- Overleaf template — link and content both pending, tracked under "Next Steps" (see Modelling Results → Overleaf preparation).
+
+---
+
 ## Repository Structure
 
-Current state (updated 2026-07-15) — `src/` (models), `notebooks/`, and `experiments/` are not yet created since modelling hasn't started; they're kept below as the planned layout.
+**Note (updated 2026-07-30, after second `code_for_github` sync):** the full modelling pipeline has now been recovered into `src/` and `data/preprocessing/` (see "Known Gaps" for the one remaining missing script). Actual current layout of the new/changed parts:
+
+```
+dissertation-cvr-llm/
+├── migration_package/
+│   ├── MIGRATION_NOTES.md
+│   └── processed_data/                              # data outputs — see Modelling Results
+├── data/preprocessing/
+│   ├── confirm_filtering_no_distortion.py
+│   ├── split_train_val.py
+│   ├── filter_test_and_join.py
+│   ├── extract_item_pseudo_text.py
+│   ├── extract_user_pseudo_text.py
+│   ├── profile_raw_fields.py
+│   ├── build_test_difficulty_segments.py
+│   └── degree_distribution_scan_test.py              # STILL MISSING
+├── src/
+│   ├── eval_context_segments.py
+│   ├── baselines/
+│   │   └── id_embedding_baseline.py                  # ESMM baseline
+│   └── models/
+│       ├── llm_encoder_v1.py
+│       ├── llm_encoder_v1_full.py
+│       └── llm_encoder_v2_aligned.py
+└── docs/
+    ├── references.bib
+    └── methods_results_draft.tex
+```
+
+Original 2026-07-15 planned layout (still mostly aspirational for `notebooks/`, `experiments/`):
 
 ```
 dissertation-cvr-llm/
@@ -200,37 +365,18 @@ Note: `Dataset/` (raw Ali-CCP + Criteo files, ~15GB) is gitignored and lives onl
 - [x] Literature review — LLM Recommendation (BERT4Rec, UniSRec, RLMRec, TALLRec) (2026-07-15)
 - [x] Dataset acquisition and EDA — Ali-CCP (2026-07-15), Criteo (done)
 - [x] k-core filtering pipeline — Ali-CCP reduced to 3.25M rows / 140,782 items / 19,550 sessions (2026-07-15)
-- [ ] Train/test split — representative split, fixed and reused across all subsequent experiments
-- [ ] Baseline model run (data is ready — unblocked)
-- [ ] Feature/text extraction for LLM encoder input (known gap — see Dataset section)
-- [ ] LLM Encoder V1 — ID embeddings + LLM embedding (BERT first pass; see Next Steps)
-- [ ] LLM Encoder V2 (if time permits)
-- [ ] Test set design — easy/hard splits (e.g. by prediction horizon length); multi-dataset × multi-model evaluation matrix
-- [ ] Dissertation write-up (Overleaf — see Next Steps)
-
----
-
-## Next Steps (Supervisor Meeting 2026-07-21)
-
-Agreed with Dr. Sinclair:
-
-1. **Baseline model** — data is ready, run now.
-   - First: build a representative train/test split; this exact split is reused for every experiment going forward (baselines, V1, V2) so results are comparable.
-2. **Feature/text extraction** — extract the full categorical feature set (from skeleton + common_features) needed to build LLM input text for the k-core-filtered subset (see "Known gap" in Dataset section).
-3. **V1 — add LLM embedding**
-   - Write up the exact method before implementing.
-   - LLM embedder choice: first pass with a small LM (BERT) to get an initial result quickly.
-   - Maintain a candidate list of alternative embedders to try afterward: XLNet, MPNet, and other LMs known for strong representation quality.
-   - Report results for V1 once done.
-4. **V2** — only if time allows after V1 is reported.
-5. **Test set design**
-   - Split the test set into "easier" vs "harder" segments — e.g. test whether shorter prediction horizons are easier, and if so, evaluate the two groups separately.
-   - Evaluation matrix: multiple datasets × multiple models, all on the *same* train/test combination, so techniques can be compared directly and fairly.
-6. **Thesis write-up (Overleaf)**
-   - Template: [overleaf.com/project/6a35112f7339d98b5f33bc6a](https://www.overleaf.com/project/6a35112f7339d98b5f33bc6a)
-   - Make a copy, name it `[MSc Thesis] YourName ProjectName`.
-   - Populate with the literature list/citations already compiled (see Literature Review Summary above and `docs/literature_reading_list.docx`).
-   - Add baseline methods/results once available (from step 1).
+- [x] Official train/val/test split (session-based 90/10 on train pool, official test file)
+- [x] Post-click CVR bug found and corrected (full-population CVR = 0.5353%)
+- [x] Filtering-distortion check (CTR shifts, CVR does not)
+- [x] Feature/text extraction for LLM encoder input — pseudo-text for 663K items / 12K users
+- [x] Baseline implementation — ESMM ID-embedding, test CTCVR-AUC = 0.5610
+- [x] V1 / V1-Full — frozen MiniLM pseudo-text embeddings (both below baseline)
+- [x] V2 — RLMRec-style ID+text alignment (≈ parity with baseline, best overall)
+- [x] Test-set difficulty segmentation (context-length × cold-start 2×2) — V1/V1-Full beat V2 in hardest cell
+- [x] Full modelling pipeline code recovered (2026-07-30, two `code_for_github` syncs) — all preprocessing, baseline, V1/V1-Full/V2, and evaluation scripts now in this repo and verified against the data; only `degree_distribution_scan_test.py` still missing (non-blocking, its output already exists) — see "Known Gaps"
+- [ ] Second real-text dataset decision (pending supervisor input)
+- [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy
+- [ ] Dissertation write-up
 
 ---
 

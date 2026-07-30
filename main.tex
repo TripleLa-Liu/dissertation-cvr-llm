@@ -1,0 +1,209 @@
+%-------------------------------------------------------------------------------
+% UCL MSc Dissertation — Knowledge, Information and Data Science (KIDS)
+% Title: LLM-Enhanced Dynamic Graph Networks for Conversion Rate Prediction
+% Author: Liu Yize
+% Supervisor: Dr. Arabella Sinclair
+% The template used in this article was provided by Sofia Feist, 2020,
+% and has been modified on this basis.
+%-------------------------------------------------------------------------------
+
+% ------------------ DOCUMENT SETUP ------------------
+\documentclass[12pt]{report}
+\author{SRN: XXXX}   % <-- replace with your SRN
+
+% Inputs the Document Packages
+\input{_Packages}
+
+% Font
+\setmainfont{Arial}
+
+% Line Spacing
+\setstretch{2.0}
+
+% Controls how many subchapters the document can take
+% and how many of those will get put into the contents pages.
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{2}
+
+% The folder path where images will be uploaded
+\graphicspath{{./Images/}}
+
+% Numeration Type for chapters (Arabic 1, 2, 3)
+\renewcommand\thechapter{\arabic{chapter}}
+
+% Line Break Properties
+\tolerance=1
+\emergencystretch=\maxdimen
+\hyphenpenalty=10000
+\hbadness=10000
+
+% Formatting Table of Contents/Lists titles
+\renewcommand{\contentsname}{\normalfont\bfseries\LARGE{CONTENTS}}
+\renewcommand{\listfigurename}{\normalfont\bfseries\LARGE{LIST OF FIGURES}}
+\renewcommand{\listtablename}{\normalfont\bfseries\LARGE{LIST OF TABLES}}
+
+% Title Formatting customisation
+\titleformat{\chapter}{\normalfont\bfseries\LARGE}{\thechapter.}{1em}{\MakeUppercase}
+\titlespacing*{\chapter} {0pt} {0pt} {15pt}
+\titleformat{\section}{\normalfont\bfseries\Large}{\thesection.}{1em}{}
+\titleformat{\subsection}{\normalfont\bfseries\large}{\thesubsection.}{1em}{}
+\titleformat{\subsubsection}{\normalfont\bfseries\normalsize}{}{1em}{}
+
+% Set headheight and adjust topmargin
+\setlength{\headheight}{14.5pt}
+\addtolength{\topmargin}{-2.5pt}
+
+% HEADER AND FOOTER
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{INST0062}
+\fancyhead[C]{\thepage}
+\fancyhead[R]{SRN: XXXX}   % <-- replace with your SRN
+
+% Change figure/table/equation numbering per chapter
+\numberwithin{figure}{chapter}
+\numberwithin{table}{chapter}
+\numberwithin{equation}{chapter}
+
+%  -------------------------------------------------
+%  --------- The document starts from here ---------
+%  -------------------------------------------------
+\begin{document}
+
+% ------------------  TITLE PAGE -------------------
+\begin{titlepage}
+\begin{center}
+
+    % UCL letterhead image
+    \vspace*{-3.5cm}
+    \makebox[\textwidth]{\includegraphics[width=\paperwidth]{Image/ucl_letterhead.png}}
+
+    \vfill
+    \vspace{1cm}
+
+    % Title
+    {\Large\textbf{LLM-Enhanced Dynamic Graph Networks for Conversion Rate Prediction:\\[0.4em]
+    Integrating Large Language Model Representations\\
+    to Mitigate Delayed Feedback Bias in Recommender Systems\\}}
+
+    \vspace{2cm}
+
+    % Author
+    {\Large\textbf{SRN: XXXX\\}}   % <-- replace with your SRN
+
+    % Date
+    {\Large\textbf{September 2026\\}}
+
+    % Module code
+    {\Large\textbf{INST0062 MSc Dissertation\\}}
+
+    % Supervisor
+    {\Large\textbf{Supervisor: Dr.\ Arabella Sinclair\\}}
+
+    \vspace{3cm}
+
+    {\textbf{Word count: XXX\\
+    Reference style: Nature\\}}
+
+    \vspace{3cm}
+
+    {\textbf{
+    This dissertation is submitted in partial fulfilment of the requirements for
+    the Master's degree in Knowledge, Information and Data Science, UCL.\\}}
+
+    \vfill
+\end{center}
+\end{titlepage}
+
+% ----------------------  ABSTRACT -----------------------
+\newpage
+\chapter*{Abstract}
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Conversion Rate (CVR) prediction — estimating the probability that a user will complete a purchase after clicking an advertisement — is a critical task in commercial recommender systems. Two persistent challenges limit the performance of existing models: first, the \textit{delayed feedback problem}, whereby conversions occur long after the initial click, causing training labels to be temporarily mislabelled as negative (false negatives); second, the reliance on \textit{ID-based embeddings}, which carry no semantic understanding of users or items, and perform poorly for users with sparse interaction histories.
+
+This dissertation proposes a unified architecture that addresses both limitations simultaneously. A pre-trained Large Language Model (LLM) encoder replaces conventional ID embeddings by generating semantic representations from item and user textual descriptions. These representations are integrated into a Dynamic Graph Sequential Recommendation (DGSR) framework, which models cross-user collaborative signals over time using long-term and short-term preference attention. A delayed feedback correction layer, drawing from the DEFER and FSIW approaches, is applied to the training objective to reduce the disruptive effect of false-negative labels.
+
+Empirical evaluation on the Ali-CCP dataset addresses three research questions: whether LLM embeddings improve CVR prediction performance over ID-based baselines (RQ1); whether LLM semantic features help mitigate delayed feedback bias (RQ2); and what the computational trade-off of this integration is (RQ3). Ablation experiments isolate the contribution of each architectural component.
+
+\vspace{1cm}
+\textbf{Keywords:} Conversion Rate Prediction, Delayed Feedback, Large Language Models, Dynamic Graph Neural Networks, Recommender Systems, False Negative Correction
+
+% -----------------  DECLARATION  -------------------
+\chapter*{Declaration}
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{Declaration}
+
+I have read and understood the College and Departmental statements and guidelines concerning plagiarism. I declare that:
+
+\begin{itemize}
+    \item This submission is entirely my own original work.
+    \item Wherever published, unpublished, printed, electronic or other information sources have been used as a contribution or component of this work, these are explicitly, clearly and individually acknowledged by appropriate use of quotation marks, citations, references and statements in the text. It is XXX words in length.
+\end{itemize}
+
+% ------------------  TABLE OF CONTENTS --------------------
+\newpage
+\tableofcontents
+\thispagestyle{fancy}
+
+% -------------------  LIST OF FIGURES --------------------
+\newpage
+\listoffigures
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{List of Figures}
+
+% -------------------  LIST OF TABLES ---------------------
+\newpage
+\listoftables
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{List of Tables}
+
+% -----------------  LIST OF ABBREVIATIONS -------------------
+\chapter*{List of Abbreviations}
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{List of Abbreviations}
+
+\textbf{AUC} : Area Under the ROC Curve \\
+\textbf{BPR} : Bayesian Personalised Ranking \\
+\textbf{CTR} : Click-Through Rate \\
+\textbf{CVR} : Conversion Rate \\
+\textbf{DEFER} : Debiasing CVR Estimation via Delayed Feedback Elimination and Recovery \\
+\textbf{DGSR} : Dynamic Graph Sequential Recommendation \\
+\textbf{DF}   : Delayed Feedback \\
+\textbf{DFM}  : Delayed Feedback Model \\
+\textbf{EM}   : Expectation-Maximisation \\
+\textbf{ES-DFM} : Elapsed-Time Sampling Delayed Feedback Model \\
+\textbf{FSIW} : Feedback Shift Importance Weighting \\
+\textbf{GNN}  : Graph Neural Network \\
+\textbf{ID}   : Identifier (as in ID-based embedding) \\
+\textbf{LLM}  : Large Language Model \\
+\textbf{NLL}  : Negative Log-Likelihood \\
+\textbf{TGN}  : Temporal Graph Network \\
+
+% -----------------  ACKNOWLEDGEMENTS  -------------------
+\chapter*{Acknowledgements}
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+I would like to express my sincere gratitude to my supervisor, Dr.\ Arabella Sinclair, for her guidance, support, and insightful feedback throughout this dissertation.
+
+% ------------------  MAIN BODY  --------------------
+\include{chapter_1_Introduction}
+\include{chapter_2_Literature_Review}
+\include{chapter_3_Methodology}
+\include{chapter_4_Experiments}
+\include{chapter_5_Results}
+\include{chapter_6_Conclusion}
+
+% -------------------  BIBLIOGRAPHY ---------------------
+\newpage
+\setstretch{1.0}
+\printbibliography[title={Bibliography}]
+\thispagestyle{fancy}
+\addcontentsline{toc}{chapter}{Bibliography}
+
+\end{document}
+%  -------------------------------------------------
+%  --------- The document ends from here -----------
+%  -------------------------------------------------

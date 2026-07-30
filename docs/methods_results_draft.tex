@@ -1,0 +1,90 @@
+% ============================================================
+% methods_results_draft.tex
+% LLM-Enhanced Dynamic Graph Networks for CVR Prediction
+% Liu Yize | UCL MSc KIDS
+% Draft draft (2026-07-21) — paste into the relevant Methods/
+% Experiments chapter of the Overleaf thesis template, then adjust
+% headings/labels to match the template's existing structure.
+% Cite with \cite{...} using keys from references.bib.
+% ============================================================
+
+\section{Dataset and Experimental Setup}
+
+Experiments use the Ali-CCP (Alibaba Click and Conversion Prediction) dataset. Following k-core filtering (item threshold $K_{\text{item}}$, session threshold $K_{\text{session}}=200$), the training pool contains 3.25M rows across 140{,}782 items and 19{,}550 sessions. We use Alibaba's officially provided \texttt{sample\_train}/\texttt{sample\_test} files as the train/test boundary, since the exact partition methodology is not publicly documented and both files are near-identical in size ($\sim$11GB each), ruling out a simple chronological last-day holdout for this release. Within the filtered training pool, a session-level 90/10 split (seed = 42) yields a validation set for early stopping; the official test file is reserved exclusively for final evaluation.
+
+Filtering on the test side is intentionally asymmetric: the item whitelist (140{,}782 items) is inherited from the training vocabulary, while the session threshold is recomputed on the test file's own session-index distribution. Test rows whose item lies outside the training vocabulary are retained (not dropped) and flagged with a binary \texttt{is\_cold\_start\_item} indicator, giving a built-in cold-start evaluation segment: 42.86\% of kept test rows (859{,}828/2{,}006{,}347) are cold-start under this definition.
+
+\begin{table}[h]
+\centering
+\caption{Train/validation/test split summary}
+\label{tab:split-summary}
+\begin{tabular}{lrrrr}
+\toprule
+Split & Rows & Sessions & Distinct items & CTR / CVR (post-click) \\
+\midrule
+Train       & 2{,}928{,}363 & 17{,}595 & 140{,}092 & 3.2132\% / 0.5208\% \\
+Validation  & 320{,}883     & 1{,}955  & 99{,}902  & 3.2741\% / 0.5901\% \\
+Test        & 2{,}006{,}347 & 7{,}921  & --        & 3.5877\% / 0.4543\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CVR is computed as (purchases among clicked rows) / (clicks) throughout, rather than (all positive-purchase rows) / (clicks) --- the two differ due to a small number of anomalous click=0, purchase=1 rows in the raw data ($<0.05\%$).
+
+\subsection{Item and User Pseudo-Text}
+
+Ali-CCP does not expose real item titles, descriptions, or user profiles; every categorical attribute is an anonymised integer feature ID with no published decoder. We empirically profiled the raw field schema (reservoir sampling, cardinality and missingness analysis) and cross-referenced candidate user-side fields against Alibaba's separately published \texttt{user\_profile.csv} schema (from the related Alimama CTR dataset), obtaining high-confidence semantic labels for 8 user demographic fields (segment/group, gender, age group, spending power, shopping depth, occupation proxy, city tier) and lower-confidence labels for 4 item-side fields (category, shop, intention node, brand). From these we constructed template ``pseudo-text'' sentences, e.g.\ \textit{``This item's category is category\_8316768, shop is shop\_8385719, brand is brand\_9247244.''} --- real English scaffolding words with out-of-vocabulary numeric identifiers standing in for actual semantic content. This is a known and explicitly flagged limitation of the dataset for this line of experimentation (see Discussion), not a design choice.
+
+\section{Model Architectures}
+
+All four models share an ESMM-style (Entire Space Multi-task Model) two-tower architecture: a shared representation for user and item feeds separate CTR and CVR MLP towers ($[128, 64]$ hidden units), trained jointly via
+\[
+\mathcal{L} = \text{BCE}(\hat{p}_{\text{ctr}}, y_{\text{click}}) + \text{BCE}(\hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}, y_{\text{purchase}})
+\]
+over the entire impression space, avoiding the sample selection bias of training CVR only on clicked rows. The four variants differ only in how the user/item representation is constructed:
+
+\begin{description}
+  \item[Baseline (ID embedding).] Standard learned \texttt{nn.Embedding} tables for user\_id and item\_id, with index 0 reserved as a zero-vector UNK for out-of-vocabulary entities (\texttt{padding\_idx=0}).
+  \item[V1 (item-only text replace).] Item-side embedding replaced with a frozen sentence embedding of the item's pseudo-text (\texttt{all-MiniLM-L6-v2}, 384-dim) passed through a trainable adapter (Linear(384,128) $\to$ ReLU $\to$ Dropout $\to$ Linear(128,32)). User side unchanged (learned ID embedding). Architecturally follows the UniSRec \cite{hou2022unisrec} REPLACE pattern.
+  \item[V1-Full (item + user text replace).] As V1, but the user-side embedding is also replaced with a frozen MiniLM embedding of the user's demographic pseudo-text plus a separate trainable adapter, removing the user-side UNK fallback entirely.
+  \item[V2 (ID + LLM alignment).] Keeps \emph{both} learned ID embeddings (as in Baseline), and adds a symmetric InfoNCE contrastive loss ($\lambda = 0.1$) pulling the item's ID embedding toward a trainable projection of its frozen MiniLM pseudo-text embedding. The trained projection head is reused at inference time as a substitute representation for cold-start items, replacing the zero-vector UNK fallback. Follows the RLMRec \cite{ren2024rlmrec} ALIGN pattern.
+\end{description}
+
+All four models are trained on the same train/validation split, early-stopped on validation CTCVR-AUC (patience = 3), and evaluated once on the held-out test split, broken down by seen vs.\ cold-start items.
+
+\section{Results}
+
+\begin{table}[h]
+\centering
+\caption{Test-set AUC by model variant (CTCVR-AUC unless noted)}
+\label{tab:main-results}
+\begin{tabular}{lrrrr}
+\toprule
+ & Baseline (ID) & V1 (item) & V1-Full (item+user) & V2 (ID+align) \\
+\midrule
+Validation CTCVR-AUC        & 0.6243 & 0.5710 & 0.5180 & \textbf{0.6265} \\
+Validation CVR-AUC          & 0.5654 & 0.4366 & 0.4827 & \textbf{0.5758} \\
+Test overall CTCVR-AUC      & 0.5610 & 0.5287 & 0.5124 & 0.5561 \\
+Test seen-item CVR-AUC      & 0.5375 & 0.4359 & 0.4637 & \textbf{0.5508} \\
+Test cold-start CTR-AUC     & 0.5375 & \textbf{0.5556} & 0.5193 & 0.5357 \\
+Test cold-start CVR-AUC     & 0.5315 & 0.4872 & 0.5159 & 0.5284 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three findings recur consistently across the two REPLACE variants (V1, V1-Full) relative to the Baseline: (1) replacing the item ID embedding with pseudo-text yields a modest cold-start CTR gain ($+0.018$ AUC), i.e.\ even anonymised pseudo-text provides \emph{some} signal where the ID baseline has only a zero UNK vector; (2) CVR-AUC degrades substantially under both REPLACE variants (Baseline 0.5375 seen-item CVR-AUC $\to$ 0.4359 for V1, 0.4637 for V1-Full), falling below chance on some splits; (3) replacing the user-side embedding (V1-Full) is uniformly worse than replacing the item side alone (V1), consistent with the low cardinality of the available demographic fields (as few as 2--4 distinct values per field) causing many users to collapse onto near-identical pseudo-text.
+
+V2 (ALIGN) is the only LLM-integrated variant that does not clearly underperform the ID-only baseline: it matches or exceeds Baseline on validation CTCVR-AUC, validation CVR-AUC, and test seen-item CVR-AUC, and comes within 0.005 AUC of Baseline on test overall CTCVR-AUC. This supports the interpretation that \emph{retaining} learned ID embeddings while using pseudo-text only as an auxiliary alignment signal (rather than a replacement) preserves the fine-grained memorisation capacity IDs provide, while still offering a mild regularisation benefit consistent with RLMRec's own reported results \cite{ren2024rlmrec}. However, V2 does not reproduce V1's cold-start CTR gain (0.5357 vs.\ 0.5556), indicating its projection head --- trained primarily against warm items' ID embeddings --- generalises to genuinely unseen items less effectively than V1's direct replacement approach.
+
+\section{Discussion: Limits of Pseudo-Text on Ali-CCP}
+
+All three architectural variants converge on the same conclusion: with Ali-CCP's fully anonymised categorical fields, none of the three integration patterns (REPLACE-item, REPLACE-item+user, ALIGN) structurally solves the cold-start problem this dissertation targets. The ALIGN pattern (V2) avoids actively \emph{hurting} performance, but the underlying pseudo-text lacks the semantic richness that a pretrained language model could otherwise draw on --- there is no real title, description, or profile text anywhere in the dataset, only template sentences built around out-of-vocabulary numeric identifiers. This is a dataset-level limitation rather than an architectural one, and motivates evaluating the same three architectures on a second, real-text dataset (e.g.\ Amazon Reviews or MIND) as part of the multi-dataset $\times$ multi-model evaluation matrix, to isolate whether the REPLACE/ALIGN distinction behaves differently once genuine semantic text is available.
+
+% ------------------------------------------------------------
+% Candidate embedder list (for a "future work" or "implementation
+% details" subsection) -- see README "Candidate LM list" section
+% for the full table and VRAM/feasibility notes.
+% ------------------------------------------------------------
+\subsection{Candidate Embedders for Future Iterations}
+
+The reported results use \texttt{all-MiniLM-L6-v2} \cite{reimers2019sbert} (22M parameters, 384-dim) as a fast first-pass encoder. Stronger \texttt{sentence-transformers}-compatible alternatives identified for future iterations include \texttt{all-mpnet-base-v2} \cite{song2020mpnet} (109M parameters, 768-dim), BGE-base-en-v1.5, E5-base-v2, and GTE-base (all $\sim$109M parameters, competitive on the MTEB benchmark), and the more recent compact EmbeddingGemma-300M. XLNet \cite{yang2019xlnet} was also named as a candidate in supervisor discussion, but is an autoregressive permutation-language-model backbone rather than a model pretrained with a sentence-embedding (Siamese/contrastive) objective; using it as a sentence encoder without first fine-tuning it as an SBERT-style bi-encoder would likely understate its true representational quality relative to the models above, so it was deprioritised in favour of MPNet as the fair like-for-like ``stronger embedder'' comparison point.
