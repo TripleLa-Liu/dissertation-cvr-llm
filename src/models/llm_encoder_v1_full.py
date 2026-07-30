@@ -4,46 +4,27 @@ Ali-CCP LLM Encoder V1 (FULL) — frozen small-LM item AND user embeddings
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHAT THIS IS
--------------
-Completes V1 per the supervisor meeting todo ("extract full categorical
-feature set... add LLM embedding"). llm_encoder_v1.py only replaced the
-ITEM side with LLM text; user side was still a learned ID embedding. This
-version replaces BOTH sides with frozen `all-MiniLM-L6-v2` embeddings of
-template pseudo-text (item: category/shop/intention-node/brand from
-extract_item_pseudo_text.py; user: gender/age/spending-power/shopping-
-depth/occupation/city-tier/segment from extract_user_pseudo_text.py) +
-separate trainable adapters, feeding the same ESMM two-tower architecture.
+Completes V1: llm_encoder_v1.py only replaced the item side with LLM text;
+user side was still a learned ID embedding. This version replaces both
+sides with frozen `all-MiniLM-L6-v2` embeddings of template pseudo-text
+(item: category/shop/intention-node/brand from extract_item_pseudo_text.py;
+user: gender/age/spending-power/shopping-depth/occupation/city-tier/segment
+from extract_user_pseudo_text.py) plus separate trainable adapters, feeding
+the same ESMM two-tower architecture.
 
-WHY THIS ALSO MATTERS BEYOND "COMPLETING V1"
-------------------------------------------------
-Baseline #1's train vocabulary covered only 9,074 users (vs 140,092
-items) — flagged as a likely driver of the val->test generalisation gap,
-since unseen test users get the same zero-vector UNK problem unseen items
-do. user_pseudo_text.csv covers every user_id across train/val/test (not
-just train — see extract_user_pseudo_text.py), so this version has NO
-user-side UNK problem either, same as the item side already didn't in
-llm_encoder_v1.py. If the user-side generalisation gap hypothesis is
-right, this full version should show a smaller val->test drop than both
-baseline #1 and the item-only V1.
+Motivation beyond completing V1: the baseline's train vocabulary covers
+only 9,074 users (vs 140,092 items), a likely driver of the val->test
+generalisation gap, since unseen test users hit the same UNK problem
+unseen items do. user_pseudo_text.csv covers every user_id across
+train/val/test, removing the user-side UNK problem the same way the item
+side already lacks one in llm_encoder_v1.py.
 
-CAVEAT — same as llm_encoder_v1.py and README's "LLM text feasibility"
-note: all pseudo-text is built from anonymised numeric feat_ids with no
-public decoder. This is still testing "does an LM's architecture handle
-these IDs better than a from-scratch embedding table", not "does genuine
-pretrained world knowledge help" (see llm_encoder_v1.py's results — CTR
-improved on cold-start, CVR got worse — the same dynamic may or may not
-repeat here).
+Same caveat as llm_encoder_v1.py: all pseudo-text is built from anonymised
+numeric feat_ids with no public decoder, so this tests LM-architecture
+handling of these IDs, not genuine pretrained world knowledge.
 
-USAGE
------
-1. Run extract_user_pseudo_text.py first if user_pseudo_text.csv doesn't
-   exist yet (item_pseudo_text.csv should already exist from
-   llm_encoder_v1.py's run).
-2. Run: python llm_encoder_v1_full.py
-3. Send me the printed FINAL RESULTS — three-way comparison against
-   baseline #1 and llm_encoder_v1.py (item-only), especially val->test
-   generalisation gap and the seen/cold-start breakdown.
+Requires item_pseudo_text.csv and user_pseudo_text.csv (from
+extract_item_pseudo_text.py / extract_user_pseudo_text.py).
 """
 import json
 import os
@@ -351,8 +332,6 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved metrics to {METRICS_PATH}")
-    print("\nSend me this FINAL RESULTS block — three-way comparison against "
-          "baseline #1 and the item-only V1 (both already in README).")
 
 
 if __name__ == "__main__":

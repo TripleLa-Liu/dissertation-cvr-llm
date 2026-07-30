@@ -4,70 +4,26 @@ Ali-CCP k-core Filtering + common_features Join (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-STEP 2 of preprocessing (step 1 = degree_distribution_scan.py, already run).
+Step 2 of preprocessing (step 1 = degree_distribution_scan.py):
+1. Loads the exact item/session degree counters from degree_distribution_scan.py
+   (aliccp_degree_counters.pkl) — no rescan needed.
+2. Builds the qualifying item set (degree >= K_ITEM) and qualifying session
+   set (degree >= K_SESSION, common_feature_index).
+3. Streams sample_skeleton_train.csv once, keeping rows where both the item_id
+   and common_feature_index qualify, writing aliccp_filtered_skeleton.csv.
+4. Streams common_features_train.csv once, extracting only the needed
+   common_feature_index rows, and joins user_id (field 101) onto the filtered
+   skeleton to produce the final aliccp_filtered_joined.csv.
 
-WHAT THIS DOES
---------------
-1. Loads the exact item/session degree counters produced by
-   degree_distribution_scan.py (aliccp_degree_counters.pkl) — no rescan needed.
-2. Builds the set of "qualifying" items (degree >= K_ITEM) and "qualifying"
-   sessions/common_feature_index (degree >= K_SESSION).
-3. Streams sample_skeleton_train.csv ONCE, keeping only rows where BOTH the
-   row's item_id and its common_feature_index qualify. Writes the survivors
-   to aliccp_filtered_skeleton.csv.
-4. Streams common_features_train.csv ONCE, but only extracts rows whose
-   common_feature_index is one we actually need (a small subset of the ~730K
-   total) — this keeps the join pass cheap despite common_features being an
-   8.6GB file with very long rows (mean feature_num ~518).
-5. Joins user_id (field 101) onto the filtered skeleton and writes the final
-   modelling-ready file: aliccp_filtered_joined.csv.
-
-THRESHOLD CHOICE (see degree_distribution_scan.py's printed K-CORE TABLE for
-the full picture; short version):
-  - Items are long-tailed on the LOW end: 42.6% of the 3.17M items are
-    one-off appearances, contributing only ~3% of total rows. Filtering low-
-    degree items shrinks the item vocabulary a lot with little volume loss.
-    K_ITEM=50 keeps 140,782 items — inside the dissertation's 50K-200K
-    per-entity target.
-  - Sessions (common_feature_index, used as a user/context proxy since real
-    user_id isn't in the skeleton file — see aliccp_eda_raw.py) are the
-    OPPOSITE: only 1.2% are one-off; most already have substantial activity
-    (mean 57.9 rows/session). Low thresholds barely reduce row volume — you
-    need K_SESSION=100 to meaningfully cut volume (94,969 sessions kept,
-    ~15.8M rows on that axis alone), which is also why session threshold is
-    the main lever for total row-count control, not just a noise floor.
-
-If the final row count after BOTH filters is still outside the ~2-5M target:
-  - Too high  -> raise K_ITEM and/or K_SESSION, rerun.
-  - Too low   -> lower them, rerun.
-No rescan of the 42.3M-row file is needed to try new thresholds against the
-counters — only step 3 (the actual filter pass) needs rerunning.
-
-UPDATE (after first run, K_ITEM=50/K_SESSION=100 -> 9,964,603 rows kept):
-row count was ~2-5x over target while item/session entity counts were
-already in range, so K_SESSION was raised, not K_ITEM. Extending the session
-k-core table past k=100 (see check_session_thresholds.py) revealed a steep
-drop-off: sessions kept falls from 94,969 (k=100) to 19,550 (k=200) to 4,904
-(k=300) — most sessions cluster in the 100-300 activity range (plausibly
-because the 8-day observation window caps how much activity a single
-session/context can accumulate). This means the original 50K-200K entity
-target and the 2-5M row target can't both be hit exactly — there's no k
-where session count stays >=50K AND row count is already <=5M. Prioritising
-the row-count target (the more operationally binding one for training
-feasibility) and accepting a smaller-but-still-reasonable session/user count
-(~10K-20K, which is a normal scale for published GNN recsys work) is the
-recommended trade-off. K_SESSION=200 estimated to land the combined
-(item+session) row count near the middle of the target range.
-
-USAGE
------
-1. Make sure aliccp_degree_counters.pkl (from degree_distribution_scan.py) is
-   in the same folder as this script.
-2. Adjust K_ITEM / K_SESSION below if you want to try different thresholds.
-3. Run: python filter_and_join.py
-   Expected runtime: ~3-4 min for the skeleton filter pass (same order as
-   degree_distribution_scan.py) + a few minutes for the common_features join
-   (only ~730K rows total, cheap even though individually large).
+Threshold rationale: items are long-tailed on the low end (42.6% of the
+3.17M items are one-off, contributing ~3% of rows), so K_ITEM=50 keeps
+140,782 items with little volume loss. Sessions are the opposite — only 1.2%
+are one-off, mean 57.9 rows/session — so session degree is the main lever
+for total row-count control; K_SESSION=200 (raised from an initial 100,
+which kept 9.96M rows, well above the ~2-5M target) keeps 19,550 sessions
+and lands total rows near the middle of the target range. See
+check_session_thresholds.py for the marginal threshold table behind this
+choice; no rescan of the 42.3M-row file is needed to try other thresholds.
 """
 import csv
 import pickle

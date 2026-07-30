@@ -4,71 +4,39 @@ Ali-CCP Raw-Format EDA Script
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS SCRIPT EXISTS
-----------------------
-The official Ali-CCP files (sample_skeleton_train.csv, sample_skeleton_test.csv,
-common_features_train.csv, common_features_test.csv) are NOT a fixed-width CSV.
-Each line has a *variable* number of comma-separated fields because the trailing
-"feature list" length depends on feature_num. pandas.read_csv() with a fixed
-column count will misparse or error on this file. This script parses it manually.
+The official Ali-CCP files are not fixed-width CSVs: each line has a variable
+number of comma-separated fields because the trailing feature list's length
+depends on feature_num, so pandas.read_csv() with a fixed column count
+misparses this file. This script parses it manually.
 
-CONFIRMED FORMAT — verified directly against the real downloaded files with a
-byte-level sniff (repr() of the raw bytes), NOT assumed from documentation:
-
+Confirmed file format (verified via byte-level inspection of the raw files):
   sample_skeleton_{train,test}.csv:
       sample_id,click,purchase,common_feature_index,feature_num,<feature_blob>
-  (first 5 fields are comma-separated; feature_blob is everything after the
-  5th comma)
-
   common_features_{train,test}.csv:
       common_feature_index,feature_num,<feature_blob>
 
-  <feature_blob> is NOT comma or colon separated. It uses ASCII control
-  characters as delimiters:
+  <feature_blob> uses ASCII control characters as delimiters (not comma/colon
+  as commonly documented elsewhere):
       \x01 (SOH)  separates each field:feat_id:value triple from the next
       \x02 (STX)  separates field_id from feat_id within a triple
       \x03 (ETX)  separates feat_id from feature_value within a triple
+  e.g. b'101\x0231319\x031.0\x01125\x023438774\x031.0\x01...' decodes to
+  field 101 -> feat_id 31319, value 1.0; field 125 -> feat_id 3438774, ...
 
-  e.g. raw bytes: b'101\x0231319\x031.0\x01125\x023438774\x031.0\x01...'
-       decodes to: field 101 -> feat_id 31319, value 1.0
-                   field 125 -> feat_id 3438774, value 1.0  ...
+  common_feature_index lets many skeleton rows share one row of user/context
+  features in the common_features file instead of repeating them, which is
+  why common_features_train.csv has far fewer rows than the skeleton file.
 
-  This is a known quirk of the Ali-CCP release (control-character delimiters
-  inside what looks like a CSV) — a naive split(",") or split(":") silently
-  produces garbage, which is why the sniff step below is mandatory before
-  trusting any downstream numbers.
-
-  common_feature_index lets many skeleton rows (e.g. all impressions shown to
-  the same user in the same context) share ONE row of user/context features in
-  the common_features file instead of repeating them — this is why
-  common_features_train.csv has far fewer rows than sample_skeleton_train.csv
-  despite being large in bytes (each row's feature list is long).
-
-FIELD ID NOTE — CONFIRMED against the real files (500k skeleton rows / 20k
-common_features rows sampled):
-  - field "205" (item_id) is found in 100% of SKELETON rows. Skeleton's own
-    feature_blob holds impression/item/context-specific features.
-  - field "101" (user_id) is found in 0% of skeleton rows but IS present in
-    common_features rows. This is architectural, not a wrong guess: user-side
-    features are stored ONLY in common_features_{train,test}.csv, keyed by
-    common_feature_index, and shared across every skeleton row that has that
-    same index (that's the whole point of the common-feature dedup design).
-    To attach a user_id to a skeleton row you must JOIN
-    skeleton.common_feature_index -> common_features.common_feature_index and
-    read field 101 from the matched common_features row. This script does NOT
-    do that join by default (it would require a full pass over the multi-GB
-    common_features file for a target set of indices) — it reports
-    common_feature_index reuse count as a fast proxy for "distinct user/context
-    sessions" instead, and item_id sparsity directly from the skeleton sample.
-
-HOW TO RUN
-----------
-1. Set SKELETON_PATH / COMMON_PATH below to your extracted file locations
-   (e.g. on your USB drive).
-2. `pip install pandas matplotlib` if not already installed.
-3. Run: python aliccp_eda_raw.py
-4. Read the printed sniff output FIRST — confirm the field_id assumption holds
-   before trusting the user/item sparsity numbers.
+Field IDs (confirmed on a 500k skeleton / 20k common_features sample):
+  - field 205 (item_id): present in 100% of skeleton rows.
+  - field 101 (user_id): present in 0% of skeleton rows, but present in
+    common_features rows — user-side features live only in
+    common_features_{train,test}.csv, keyed by common_feature_index, and are
+    shared across every skeleton row with that index. Attaching user_id to a
+    skeleton row requires joining on common_feature_index (not done here by
+    default, since it needs a full pass over the multi-GB common_features
+    file); this script instead reports common_feature_index reuse as a proxy
+    for distinct user/context sessions, and item_id sparsity directly.
 """
 
 import re

@@ -1,67 +1,41 @@
 """
-Ali-CCP test-set easy/hard segmentation by "context length" (2026-07-21)
+Ali-CCP test-set easy/hard segmentation by "context length"
 ============================================================================
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-ALREADY RUN (2026-07-21) -- this script was executed directly against the
-mounted dataset during this session; aliccp_test_with_segments.csv already
-exists in WORK_DIR. Kept here for reproducibility / to show the exact
-methodology, not because it still needs running.
+Splits the test set into easier/harder segments by session interaction
+count, crossed with the existing cold-start flag, giving a 2x2 difficulty
+matrix for per-model evaluation in eval_context_segments.py.
 
-WHY "SESSION INTERACTION COUNT" INSTEAD OF "PREDICTION HORIZON"
-------------------------------------------------------------------
-The meeting notes ask to split the test set into easier/harder segments,
-"e.g. by prediction horizon length". Ali-CCP carries NO per-row timestamp
-(confirmed when choosing the train/test split methodology -- only Criteo,
-our secondary dataset, has real delay timestamps), so a literal time-based
-prediction-horizon split isn't computable on this dataset.
+Ali-CCP carries no per-row timestamp (only Criteo, the secondary dataset,
+has real delay timestamps), so a literal time-based "prediction horizon"
+split isn't computable here. This uses session interaction count as a
+proxy instead — reusing the exact counts from degree_distribution_scan_test.py
+(session_counter in aliccp_degree_counters_test.pkl, the same counts
+K_SESSION=200 was chosen from): a session with more observed interactions
+gives the model more behavioural signal to condition on, a defensible
+stand-in for "more context" even without literal timestamps. This is a
+documented assumption, not a validated one.
 
-Reinterpreted proxy: session interaction count -- reusing the EXACT counts
-already computed by degree_distribution_scan_test.py (session_counter in
-aliccp_degree_counters_test.pkl, the same counts K_SESSION=200 was chosen
-from). Rationale: a session with more observed interactions gives the
-model more behavioural signal to condition on, a defensible stand-in for
-"more context before the prediction point" even without literal
-timestamps. This is a DOCUMENTED ASSUMPTION -- flag for supervisor
-confirmation, alongside the alternative of a literal time-horizon split
-once/if a timestamped second dataset is introduced (see "LLM text
-feasibility" note's real-text-dataset discussion).
-
-WHAT THIS SCRIPT DOES
------------------------
+Steps:
 1. Loads session_counter from aliccp_degree_counters_test.pkl (exact
-   interaction count per common_feature_index, computed on the FULL
-   unfiltered test file).
+   interaction count per common_feature_index, on the full unfiltered
+   test file).
 2. Joins it onto every row of aliccp_test_filtered_joined.csv via
    common_feature_index.
-3. Computes the median session count among KEPT rows (all already
-   >= K_SESSION=200 by construction of the k-core filter) and labels each
-   row long_context (>= median) or short_context (< median).
+3. Computes the median session count among kept rows (all already
+   >= K_SESSION=200 by construction) and labels each row long_context
+   (>= median) or short_context (< median).
 4. Writes aliccp_test_with_segments.csv = original columns +
    session_interaction_count, context_segment.
-5. Prints a sanity-check CTR/CVR breakdown by segment (crossed with the
-   existing is_cold_start_item flag).
+5. Prints a CTR/CVR breakdown by segment, crossed with is_cold_start_item.
 
-RESULT (2026-07-21): 2,006,347 rows. session_interaction_count: min=200,
-median=243, max=784, mean=265.6. Sanity-check breakdown (CTR / CVR
-post-click):
-  long_context  (n=1,012,202): CTR=3.4695%  CVR=0.4755%
-  short_context (n=994,145):   CTR=3.7080%  CVR=0.4340%
-  long_context  & seen       (n=571,017): CVR=0.5561%  (easiest)
-  long_context  & cold-start (n=441,185): CVR=0.3927%  (hardest)
-  short_context & seen       (n=575,502): CVR=0.4687%
-  short_context & cold-start (n=418,643): CVR=0.3945%
-Context length shows a real but SECONDARY effect (long_context CVR is
-consistently higher than short_context within both seen and cold-start
-groups) -- cold-start status remains the dominant difficulty axis. This
-gives a genuine 2x2 difficulty matrix (not just the single cold-start
-split reported so far) for the per-model evaluation in
-eval_context_segments.py.
-
-USAGE (if re-running from scratch)
-------------------------------------
-python build_test_difficulty_segments.py
+Result: 2,006,347 rows, session_interaction_count min=200, median=243,
+max=784, mean=265.6. Context length shows a real but secondary effect
+(long_context CVR consistently higher than short_context within both seen
+and cold-start groups) — cold-start status remains the dominant difficulty
+axis.
 """
 import csv
 import os

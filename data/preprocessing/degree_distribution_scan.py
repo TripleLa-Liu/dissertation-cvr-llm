@@ -4,42 +4,20 @@ Ali-CCP Exact Degree Distribution Scan (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS SCRIPT EXISTS
------------------------
-To pick a sensible k-core filtering threshold (task: reduce ~42.3M rows down
-to a workable ~2-5M interaction subset for modelling), we need the EXACT
-number of interactions per item and per common_feature_index (session) —
-not a sampled estimate. Item/session activity is extremely long-tailed (a
-50K-row uniform sample showed a median of just 1 interaction per entity), so
-any sample-based count would systematically undercount every entity's true
-frequency and bias the threshold decision. This does a single full pass over
-sample_skeleton_train.csv and counts exactly.
+Computes the exact interaction count per item and per common_feature_index
+(session) via a single full pass over sample_skeleton_train.csv, to pick a
+k-core filtering threshold that reduces ~42.3M rows to a workable modelling
+subset. Item/session activity is extremely long-tailed (a 50K-row uniform
+sample showed a median of just 1 interaction per entity), so a sampled
+estimate would systematically undercount true frequency and bias the
+threshold choice — hence the exact full-file scan.
 
-This mirrors the same parsing logic already validated in aliccp_eda_raw.py /
-full_scan_chunk.py (control-char delimiters \\x01 \\x02 \\x03 — see those
-files' docstrings for the full format writeup) but runs as ONE continuous
-pass instead of the time-boxed/resumable chunking those used — that chunking
-was only needed because of a 45-second-per-call sandbox limit that doesn't
-apply when you run this locally.
+Uses the same parsing logic as aliccp_eda_raw.py / full_scan_chunk.py
+(control-char delimiters \\x01 \\x02 \\x03).
 
-EXPECTED RUNTIME: roughly 3-8 minutes for ~42.3M rows on a normal laptop SSD
-(a cloud-sandbox run of the cheap-fields-only version hit ~225K rows/sec;
-this version also parses each row's feature blob to extract item_id, which
-is slower — expect somewhere in the range of 60K-150K rows/sec depending on
-your disk and CPU).
-
-MEMORY: the item counter can hold up to a few million unique item_ids (each a
-short string key) — expect a few hundred MB to ~1GB of RAM. Should be fine on
-any modern laptop; close other heavy applications if you're tight on RAM.
-
-HOW TO RUN
-----------
-1. Set SKELETON_PATH below to your local sample_skeleton_train.csv path.
-2. Just run: python degree_distribution_scan.py
-   (no extra packages required beyond the standard library)
-3. Send me the printed output (especially the K-CORE THRESHOLD ANALYSIS
-   table at the end) and I'll help pick the actual threshold and write the
-   join + filter pipeline that produces the final modelling dataset.
+Runtime: roughly 3-8 minutes for ~42.3M rows on a normal laptop SSD.
+Memory: item counter holds up to a few million unique item_ids — expect a
+few hundred MB to ~1GB of RAM.
 """
 
 import pickle
@@ -155,8 +133,7 @@ def main():
     print("\nNext step: pick a k (e.g. items >=5 AND sessions >=5), then run a "
           "second filtering pass (row survives only if BOTH its item_id and "
           "common_feature_index meet the threshold) to get the actual final "
-          "row count — send me this printed output and I'll help pick k and "
-          "write that filtering + common_features join script.")
+          "row count.")
 
 
 if __name__ == "__main__":

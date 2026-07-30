@@ -3,15 +3,16 @@ Resumable full-file exact scan for sample_skeleton_train.csv.
 Run repeatedly (each call processes a time-boxed chunk, saves state, resumes
 from the saved byte offset next time) until it reports DONE.
 
-Tracks EXACT n_total / n_click / n_purchase (no sampling error), plus a
+Tracks exact n_total / n_click / n_purchase (no sampling error), plus a
 reservoir sample (Algorithm R) of full parsed rows (incl. item_id) for
 distributional stats (item sparsity, feature_num, common_feature_index reuse).
 """
 import json, os, pickle, random, time
 
-PATH = "/sessions/intelligent-funny-thompson/mnt/Dataset/sample_train/sample_skeleton_train.csv"
-STATE_PATH = "/sessions/intelligent-funny-thompson/mnt/outputs/scan_state.json"
-RESERVOIR_PATH = "/sessions/intelligent-funny-thompson/mnt/outputs/scan_reservoir.pkl"
+WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
+STATE_PATH = os.path.join(WORK_DIR, "scan_state.json")
+RESERVOIR_PATH = os.path.join(WORK_DIR, "scan_reservoir.pkl")
 RESERVOIR_SIZE = 50_000
 TIME_BUDGET_SEC = 30
 

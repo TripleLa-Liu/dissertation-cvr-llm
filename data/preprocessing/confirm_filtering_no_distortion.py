@@ -4,51 +4,27 @@ Confirm (or refute) whether k-core filtering distorted the label distribution
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS SCRIPT EXISTS
-------------------------
-Supervisor (Dr. Sinclair) asked, re: the k-core filtering summary ("CTR/CVR
-of the filtered subset close to the exact full-population values — filtering
-didn't distort the label distribution"): "Is there some way to confirm this
-with a plot/stats? or is it random sampling?"
-
-This runs two analyses to answer that properly instead of asserting it:
+Tests whether k-core filtering (which selects on session/item degree, not
+randomly) distorts the CTR/CVR label distribution relative to the full
+population, via two analyses:
 1. Two-proportion z-tests (full population vs. k-core filtered subset) for
-   CTR and for CVR (post-click), with 95% Wilson confidence intervals.
-2. A degree-bucketed breakdown of CTR/CVR using the existing UNBIASED 50K
-   reservoir sample (Algorithm R, from full_scan_chunk.py) joined against the
-   exact session_counter (from degree_distribution_scan.py) -- this shows
-   *why* any shift happens (k-core selects on session degree specifically),
-   rather than just reporting a before/after number.
+   CTR and CVR (post-click), with 95% Wilson confidence intervals.
+2. A degree-bucketed breakdown of CTR/CVR using the unbiased 50K reservoir
+   sample (from full_scan_chunk.py) joined against the exact session_counter
+   (from degree_distribution_scan.py), to show why any shift occurs.
 
-RESULT (already run once, 2026-07-21/22, against this exact dataset):
-  CTR:  full=3.8871%  filtered=3.2192%  -> z=60.4, p<1e-300 (SIGNIFICANT,
-        ~17% relative drop -- filtering is NOT random sampling w.r.t. CTR;
-        the degree-bucketed breakdown shows CTR decreases as session degree
-        increases, roughly monotonically from ~10% at degree 2-9 down to
-        ~3.6-3.9% at degree >=100, before k-core's own K_SESSION=200 cutoff
-        even applies -- so selecting higher-degree sessions mechanically
-        selects lower-CTR sessions too)
-  CVR (post-click): full=0.5353%  filtered=0.5277%  -> z=0.33, p=0.74 (NOT
-        significant -- the actual dissertation target metric IS preserved
-        by filtering; the original claim holds for CVR specifically, just
-        not for CTR)
+Result: CTR shows a real, statistically significant ~17% relative drop under
+filtering (z=60.4, p<1e-300) — k-core selects on session degree, and CTR
+decreases roughly monotonically as session degree increases, so selecting
+higher-degree sessions mechanically selects lower-CTR ones too. CVR
+(post-click) — the dissertation's actual target metric — shows no
+significant difference (z=0.33, p=0.74): filtering preserves it.
 
-CONCLUSION: the original blanket claim ("filtering didn't distort the label
-distribution") was too strong as stated -- it holds for CVR (the metric
-that actually matters for this dissertation) but not for CTR, where the
-degree-based (non-random) selection mechanism causes a real, explainable,
-statistically significant shift.
-
-HOW TO RUN
------------
-python confirm_filtering_no_distortion.py
-Requires: aliccp_degree_counters.pkl (from degree_distribution_scan.py) and
-aliccp_filtered_joined.csv (from filter_and_join.py) in WORK_DIR, plus the
-exact full-population counts already established via full_scan_chunk.py
-(hardcoded below as FULL_N/FULL_CLICK/FULL_PURCHASE_AMONG_CLICK -- these are
-exact, not estimates, from the resumable full scan of all 42,300,135 rows).
-Also needs scan_reservoir.pkl (the 50K unbiased reservoir sample saved by
-full_scan_chunk.py) for the degree-bucketed breakdown plot.
+Requires aliccp_degree_counters.pkl (from degree_distribution_scan.py),
+aliccp_filtered_joined.csv (from filter_and_join.py), and scan_reservoir.pkl
+(from full_scan_chunk.py) in WORK_DIR. The exact full-population counts
+(FULL_N/FULL_CLICK/FULL_PURCHASE_AMONG_CLICK below) come from the full scan
+of all 42,300,135 rows in full_scan_chunk.py, not estimates.
 Produces: results/figures/filtering_distortion_check.png
 """
 import csv

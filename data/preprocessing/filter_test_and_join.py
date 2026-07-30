@@ -4,57 +4,34 @@ Ali-CCP TEST Split — Filtering + common_features Join (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-STEP 2 of test-set preprocessing (step 1 = degree_distribution_scan_test.py,
-already run). Companion to filter_and_join.py, which produced the TRAIN
-subset (aliccp_filtered_joined.csv: 3,249,246 rows / 140,782 items /
-19,550 sessions).
+Step 2 of test-set preprocessing (step 1 = degree_distribution_scan_test.py).
+Companion to filter_and_join.py, which produced the train subset
+(aliccp_filtered_joined.csv: 3,249,246 rows / 140,782 items / 19,550
+sessions).
 
-DESIGN RATIONALE (train/test split — see chat discussion 2026-07-21)
-----------------------------------------------------------------------
-We use Alibaba's official provided train/test files as our split (rather
-than re-cutting the train file ourselves), because:
-  1. We couldn't verify from public docs the exact chronological criteria
-     Alibaba used (the Tianchi dataset page is JS-rendered, no extractable
-     methodology text) — safer to treat the given boundary as the split
-     than to guess at a "first N days" cut.
-  2. File-size check: sample_skeleton_test.csv (~11.0GB) is essentially the
-     same size as sample_skeleton_train.csv (~11.0GB) — this is NOT a small
-     last-day holdout, so whatever the partition criterion, it's a
-     substantial, independent chunk of the log, which is what we need.
-  3. This is also what virtually every published paper using Ali-CCP does,
-     since there's no per-row timestamp to construct a custom split from.
+Uses Alibaba's officially provided train/test files as the split, rather
+than re-cutting the train file: the exact chronological partition criterion
+Alibaba used isn't documented, but sample_skeleton_test.csv (~11.0GB) is
+essentially the same size as sample_skeleton_train.csv, so whatever the
+criterion, it's a substantial independent chunk of the log — and this
+matches standard practice for Ali-CCP, since there's no per-row timestamp
+to construct a custom split from.
 
-Filtering logic — asymmetric by design:
-  - ITEM whitelist is inherited from TRAIN (the 140,782 items kept by
-    filter_and_join.py's K_ITEM=50 threshold). We do NOT recompute an item
-    threshold on the test file itself — a model only has a real embedding
-    for items it saw during training, so "does this test-row's item appear
-    in the train vocabulary" is the question that actually matters, not
-    "how popular was this item within the test file alone."
-  - SESSION threshold (K_SESSION) IS recomputed on the test file's own
-    common_feature_index degree distribution, because common_feature_index
-    is a per-file local index — train's specific session IDs don't exist
-    in the test file's ID space, so there's nothing to "inherit" there.
-  - Rows whose item is NOT in the train whitelist are KEPT, not dropped,
-    and flagged via is_cold_start_item=1. This gives a natural "harder"
-    test segment for free (ties directly into the meeting note's "easier
-    vs harder test set segments" item) — these are exactly the cases an
-    ID-only baseline cannot represent (no trained embedding exists for
-    them), whereas an LLM-text-embedding approach potentially can still
-    produce a meaningful representation from the item's textual features.
-    is_cold_start_item=0 rows are the "seen" / easier segment, directly
+Filtering is asymmetric by design:
+  - Item whitelist is inherited from train (the 140,782 items kept by
+    filter_and_join.py's K_ITEM=50 threshold) rather than recomputed on the
+    test file, since a model only has a real embedding for items seen
+    during training.
+  - Session threshold (K_SESSION) is recomputed on the test file's own
+    common_feature_index degree distribution, since that index is local to
+    each file.
+  - Rows whose item is not in the train whitelist are kept (not dropped)
+    and flagged via is_cold_start_item=1, giving a natural harder test
+    segment: these are cases an ID-only baseline cannot represent (no
+    trained embedding exists for them), whereas an LLM-text-embedding
+    approach can still derive a representation from the item's textual
+    features. is_cold_start_item=0 rows are the "seen" segment, directly
     comparable to train.
-
-USAGE
------
-1. Make sure these are both in WORK_DIR (see CONFIG below — the same shared
-   folder used by all four preprocessing scripts):
-     - aliccp_filtered_joined.csv   (train output, from filter_and_join.py)
-     - aliccp_degree_counters_test.pkl (from degree_distribution_scan_test.py)
-2. Adjust K_SESSION_TEST below if the printed test-side k-core table from
-   degree_distribution_scan_test.py suggests a different value is needed
-   (default: reuse 200, same as train, for methodological consistency).
-3. Run: python filter_test_and_join.py
 """
 import csv
 import os

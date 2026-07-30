@@ -4,53 +4,36 @@ Ali-CCP LLM Encoder V2 — RLMRec-style alignment (keep ID + regularize with tex
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS DESIGN (motivated directly by V1's results)
---------------------------------------------------------
-V1 and V1-Full REPLACED ID embeddings with frozen LLM pseudo-text
-embeddings (UniSRec-style). Both underperformed baseline #1 on CVR —
-evidence that a learned ID embedding's ability to memorise per-item/
-per-user behaviour is worth more than the (anonymised, information-poor)
-pseudo-text can compensate for. The one bright spot in V1 was the item-side
-cold-start CTR improvement.
+Motivated by V1's results: V1 and V1-Full replaced ID embeddings with frozen
+LLM pseudo-text embeddings (UniSRec-style) and both underperformed the
+baseline on CVR, suggesting a learned ID embedding's per-item/per-user
+memorisation is worth more than the anonymised pseudo-text can compensate
+for; the one bright spot was V1's item-side cold-start CTR improvement.
 
-This is the second architectural pattern from the literature review
-(RLMRec, Ren et al. WWW 2024, "Module C" in README): DON'T replace ID
-embeddings — KEEP them (so warm items/users retain full memorisation
-capacity), and use a contrastive alignment loss to pull each item's ID
-embedding towards its frozen LLM text embedding (projected into the same
-space) during training. The projection head, once trained, is ALSO reused
-at inference as a synthesised embedding for items the ID table has never
-seen (cold-start) — a natural extension addressing this dissertation's
-central cold-start question specifically, beyond what base RLMRec needs to
-handle (RLMRec's source papers work in warm-start CF settings).
+This implements the second architectural pattern from the literature
+review (RLMRec, Ren et al. WWW 2024): keep ID embeddings (so warm
+items/users retain full memorisation capacity) and use a contrastive
+alignment loss to pull each item's ID embedding towards its frozen LLM
+text embedding (projected into the same space) during training. The
+trained projection head is also reused at inference as a synthesised
+embedding for cold-start items the ID table has never seen — extending
+RLMRec (which targets warm-start CF settings) to this dissertation's
+cold-start question specifically.
 
-ARCHITECTURE
--------------
-- user_emb: learned nn.Embedding (n_users+1, dim) — IDENTICAL to baseline #1.
-- item_emb: learned nn.Embedding (n_items+1, dim) — IDENTICAL to baseline #1,
-  index 0 = UNK (never actually indexed during training, only rows with
-  cold-start items at TEST time will need the fallback path below).
+Architecture:
+- user_emb, item_emb: learned nn.Embedding, identical to the baseline
+  (index 0 = UNK, only exercised by cold-start items at test time).
 - item_llm_proj: trainable MLP, frozen 384-dim MiniLM embedding -> dim.
-- Per-row item representation:
-    item_repr = item_emb(idx)                    if idx != 0  (seen item)
-              = item_llm_proj(frozen_llm_emb)     if idx == 0  (cold-start item)
-  Implemented as a masked blend (see forward()) so the same code path
-  covers train (idx is always != 0 there) and test (mixed).
-- Training loss = BCE(ctr) + BCE(ctcvr) + lambda_align * contrastive_loss
-  where the contrastive (InfoNCE, symmetric) loss pulls item_emb(idx) and
-  item_llm_proj(frozen_llm_emb) together for DISTINCT items in each batch
-  (duplicates within a batch are de-duplicated first — a popular item
-  appearing many times in one batch would otherwise create spurious
-  false-negative pressure in InfoNCE).
+- Per-row item representation: item_emb(idx) if idx != 0 (seen item), else
+  item_llm_proj(frozen_llm_emb) (cold-start item) — a masked blend so the
+  same code path covers train (idx always != 0) and test (mixed).
+- Loss = BCE(ctr) + BCE(ctcvr) + lambda_align * contrastive_loss, where the
+  contrastive (symmetric InfoNCE) term pulls item_emb(idx) and
+  item_llm_proj(frozen_llm_emb) together for distinct items in each batch
+  (duplicates de-duplicated first to avoid spurious InfoNCE false negatives
+  from popular items appearing multiple times in a batch).
 
-USAGE
------
-1. Make sure item_pseudo_text.csv exists (from extract_item_pseudo_text.py).
-2. Run: python llm_encoder_v2_aligned.py
-3. Send me the FINAL RESULTS — four-way comparison against baseline #1,
-   V1 (item-only replace), and V1-Full (item+user replace), especially
-   whether V2 recovers baseline's seen-item performance while ALSO beating
-   it on cold-start (that's the specific hypothesis this design targets).
+Requires item_pseudo_text.csv (from extract_item_pseudo_text.py).
 """
 import json
 import os
@@ -405,8 +388,6 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved metrics to {METRICS_PATH}")
-    print("\nSend me this FINAL RESULTS block — four-way comparison against "
-          "baseline #1, V1, and V1-Full (all in README).")
 
 
 if __name__ == "__main__":

@@ -4,28 +4,18 @@ Ali-CCP test-set difficulty-segment evaluation (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHAT THIS DOES
----------------
-Completes the meeting notes' "test set design" item: breaks down all four
-already-trained models' (Baseline / V1 / V1-Full / V2) test performance by
-the new context_segment column (long_context / short_context, added by
-data/preprocessing/build_test_difficulty_segments.py -- see README "Test
-set design" section for the "session interaction count" proxy rationale)
-CROSSED with the existing is_cold_start_item flag, giving a 2x2 difficulty
-matrix instead of just the single cold-start split reported so far.
+Breaks down all four trained models' (Baseline / V1 / V1-Full / V2) test
+performance by the context_segment column (long_context / short_context,
+added by data/preprocessing/build_test_difficulty_segments.py) crossed with
+the existing is_cold_start_item flag, giving a 2x2 difficulty matrix instead
+of just the single cold-start split.
 
-Reuses each model's EXACT architecture/preprocessing from its own training
-script and loads the already-trained checkpoint (no retraining) -- this
-is pure inference, so it should run in well under a minute even on CPU.
+Reuses each model's exact architecture/preprocessing from its own training
+script and loads the already-trained checkpoint (no retraining) — pure
+inference, runs in well under a minute even on CPU.
 
-REQUIRES: aliccp_test_with_segments.csv already exists in WORK_DIR (built
-2026-07-21, already in your _processed folder -- no action needed, just
-confirm the file is there before running).
-
-USAGE
------
-python eval_context_segments.py
-Send me the printed table.
+Requires aliccp_test_with_segments.csv (from
+build_test_difficulty_segments.py) in WORK_DIR.
 """
 import json
 import os
@@ -338,8 +328,6 @@ def main():
     with open(out_path, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\nSaved full breakdown to {out_path}")
-    print("\nSend me the printed tables above (or the JSON file) -- I'll write the "
-          "easy/hard segment comparison into README/Overleaf.")
 
 
 if __name__ == "__main__":

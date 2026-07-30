@@ -4,55 +4,31 @@ Ali-CCP Raw Field Schema Profiling (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS SCRIPT EXISTS
-------------------------
-Next step per the supervisor meeting: extract the full categorical feature
-set to build LLM input text (the "known gap" — filtered/joined files
-currently only carry scalar item_id/user_id).
+Precursor to feature extraction for LLM input text: before extracting the
+full categorical feature set (filtered/joined files only carried scalar
+item_id/user_id), this profiles what fields actually exist and what they
+mean, rather than trusting public write-ups blindly — the delimiter format
+itself (\\x01\\x02\\x03) differs from what's commonly documented, and had to
+be confirmed by direct byte inspection (see aliccp_eda_raw.py).
 
-Before writing that extraction, we need to know what fields actually exist
-and what they mean. We should NOT trust public write-ups blindly here —
-the delimiter format itself (\\x01\\x02\\x03) turned out to differ from what
-was commonly documented, and had to be confirmed by direct byte inspection
-earlier in this project. Field semantics are similarly unreliable secondhand:
-a few community sources (e.g. torch-rechub's preprocessing script, which DOES
-correctly use the same delimiter format we verified — good corroboration)
-list a specific set of ~23 field IDs as "the" sparse/dense columns:
+Community sources (e.g. torch-rechub's preprocessing script, which does use
+the same verified delimiter format) list ~23 field IDs as the sparse/dense
+columns, with loose semantic guesses for a few (206=category, 207=shop,
+210=intention node, 216=brand, all item-side). Fields 101=user_id and
+205=item_id are independently confirmed via byte-level inspection; the rest
+are untested hypotheses, and since the dataset is documented elsewhere as
+having "109 features" total, that list of 23 is likely a known subset, not
+the full vocabulary. This script empirically profiles all field IDs
+actually present in the raw files, so feature choices for pseudo-text are
+based on evidence (cardinality, value patterns) rather than borrowed
+assumptions.
 
-  101, 121, 122, 124, 125, 126, 127, 128, 129, 205, 206, 207, 210, 216,
-  508, 509, 702, 853, 301, 109_14, 110_14, 127_14, 150_14
-
-...with loose semantic guesses for a few (206=category, 207=shop,
-210=intention node, 216=brand — all ITEM-side, matching field 205's item
-scope). We've independently confirmed 101=user_id and 205=item_id ourselves
-via byte-level inspection (see aliccp_eda_raw.py). Everything else here is
-an untested hypothesis, and the dataset is documented elsewhere as having
-"109 features" total — meaning that list of 23 is likely a known SUBSET,
-not the full field vocabulary. This script empirically profiles ALL field
-IDs actually present in the raw files (not just the known 23), so we pick
-LLM-text-relevant fields based on evidence (cardinality, value patterns),
-not borrowed assumptions.
-
-WHAT THIS DOES
----------------
-Takes a reservoir sample from each of sample_skeleton_train.csv (row-level:
-click, purchase, item-side + context fields) and common_features_train.csv
-(session-level: user-side fields, much longer rows — mean feature_num
-~518). For every field_id encountered, reports: how many sampled rows
-contain it, how many distinct values it takes (capped), and a handful of
-example values — enough to eyeball which fields look like categorical IDs
-worth turning into text (e.g. item category/brand/shop) vs. noise/dense
-crossed features we probably can't turn into meaningful text.
-
-HOW TO RUN
-----------
-1. Check SKELETON_PATH / COMMON_PATH below.
-2. Run: python profile_raw_fields.py
-   Expected runtime: a few minutes (sampling SAMPLE_SIZE rows each from
-   files up to 11GB, without needing a full scan).
-3. Send me the full printed output — I'll use it to design the actual
-   feature-extraction script (which fields to pull, and how to turn them
-   into item/user text descriptions for the LLM encoder).
+Takes a reservoir sample from sample_skeleton_train.csv (row-level:
+click/purchase/item-side/context fields) and common_features_train.csv
+(session-level: user-side fields, mean feature_num ~518). For each field_id
+encountered, reports occurrence rate, distinct value count (capped), and
+example values — enough to identify which fields are categorical IDs worth
+turning into text vs. noise/dense crossed features.
 """
 import random
 import time
@@ -181,9 +157,7 @@ def main():
     # common_features columns: common_feature_index,feature_num,blob -> blob is index 2
     profile_lines(common_lines, blob_col_index=2, label="COMMON_FEATURES (session-level: user/context fields)")
 
-    print("\nDone. Send me the full printed output (both tables) — I'll use it to "
-          "decide which fields to extract and how to turn them into text for the "
-          "LLM encoder.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

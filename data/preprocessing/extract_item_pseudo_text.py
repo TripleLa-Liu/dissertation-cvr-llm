@@ -4,47 +4,26 @@ Ali-CCP Item Pseudo-Text Extraction (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY "PSEUDO-TEXT"
--------------------
 Ali-CCP has no real item titles/descriptions — every attribute is an
-anonymised numeric feat_id with no published decoder (confirmed via
-profile_raw_fields.py, 2026-07-21). So this does NOT produce genuine
-natural-language item descriptions the way UniSRec/RLMRec do with real
-product titles. It builds TEMPLATE sentences from the (hypothesised, see
-profile_raw_fields.py's docstring for the evidence/confidence per field)
-item-side categorical fields:
-  206 -> category, 207 -> shop, 210 -> intention_node, 216 -> brand
-e.g. "item category is category_8316768, shop is shop_8385719, brand is
-brand_9247244, intention node is intention_9042479."
+anonymised numeric feat_id with no published decoder (see
+profile_raw_fields.py). This does not produce genuine natural-language item
+descriptions the way UniSRec/RLMRec do with real product titles; instead it
+builds template sentences from the item-side categorical fields (206 =
+category, 207 = shop, 210 = intention_node, 216 = brand), e.g. "item
+category is category_8316768, shop is shop_8385719, brand is
+brand_9247244." The template labels are real English words a pretrained LM
+has seen, but the numeric IDs after them are out-of-vocabulary — a known,
+flagged limitation (see README).
 
-This is a known, flagged limitation (see README "LLM text feasibility"
-note) — being run now to get a first working V1 comparison number before
-the supervisor meeting, NOT as a final design decision. The template
-labels ("category", "brand", ...) are real English words a pretrained LM
-has seen; only the numeric IDs after them are out-of-vocabulary, so the
-LM's tokenizer still gets some real structure to work with, even though it
-can't draw on genuine world knowledge about what the item actually is.
-
-WHAT THIS DOES
----------------
-1. Reads the item_id column from aliccp_train_split.csv, aliccp_val_split.csv,
-   aliccp_test_filtered_joined.csv to build the set of ALL item_ids we need
-   text for (union across all three splits — includes cold-start test items).
-2. Streams sample_skeleton_train.csv ONCE, recording 206/207/210/216 for any
-   item_id in the needed set that hasn't been recorded yet.
-3. Streams sample_skeleton_test.csv ONCE for any STILL-missing item_ids
-   (covers pure cold-start items that only appear in the test file).
-4. Writes item_pseudo_text.csv: item_id, pseudo_text (one row per unique item).
-
-HOW TO RUN
-----------
-1. Check the paths below.
-2. Run: python extract_item_pseudo_text.py
-   Expected runtime: similar to the earlier filter/degree-scan passes
-   (~3-8 min for the train skeleton pass, plus however long the test pass
-   takes to find the remaining cold-start items — should be much faster
-   since it can stop scanning once every needed item is found).
-3. Send me the printed summary (item counts found, coverage %).
+Steps:
+1. Reads item_id from aliccp_train_split.csv, aliccp_val_split.csv,
+   aliccp_test_filtered_joined.csv to build the union set of item_ids
+   needing text (includes cold-start test items).
+2. Streams sample_skeleton_train.csv once, recording fields 206/207/210/216
+   for any needed item_id not yet found.
+3. Streams sample_skeleton_test.csv once for any still-missing item_ids
+   (pure cold-start items that only appear in the test file).
+4. Writes item_pseudo_text.csv: item_id, pseudo_text (one row per item).
 """
 import csv
 import os
@@ -172,7 +151,7 @@ def main():
             writer.writerow([item_id, build_pseudo_text(fields)])
 
     print(f"Done. {OUTPUT_PATH} has {len(needed):,} rows (one per distinct item).")
-    print("\nSample pseudo-text (first 5 found items):")
+    print("\nSample pseudo-text (first 5 items found):")
     for item_id, fields in list(found.items())[:5]:
         print(f"  {item_id}: {build_pseudo_text(fields)}")
 

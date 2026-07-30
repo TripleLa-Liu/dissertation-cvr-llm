@@ -4,46 +4,25 @@ Ali-CCP Train / Validation Split (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-STEP 3 of preprocessing (step 1 = degree_distribution_scan.py, step 2 =
-filter_and_join.py, both already run -> aliccp_filtered_joined.csv).
+Step 3 of preprocessing (step 1 = degree_distribution_scan.py, step 2 =
+filter_and_join.py -> aliccp_filtered_joined.csv).
 
-WHY THIS SPLIT DESIGN (agreed with supervisor, 2026-07-21)
-------------------------------------------------------------
-Two-tier design:
-  1. Ali-CCP's OFFICIAL sample_skeleton_test.csv is reserved as the final
-     held-out test set. It is NOT touched by this script and should not be
-     looked at again until final results are reported (standard practice,
-     matches the original ESMM paper's benchmarking protocol on this
-     dataset).
-  2. The already k-core-filtered TRAIN file (aliccp_filtered_joined.csv,
-     3,249,246 rows) is split internally into Train / Validation here, for
-     all model development, hyperparameter tuning, and early-stopping
-     during the baseline + LLM Encoder V1/V2 work. This split is fixed
-     (seeded) and reused for every experiment so results stay comparable.
+Split design: Ali-CCP's official sample_skeleton_test.csv is reserved as
+the final held-out test set (not touched here, matching the ESMM paper's
+benchmarking protocol on this dataset). The k-core-filtered train file
+(aliccp_filtered_joined.csv, 3,249,246 rows) is split internally into
+Train/Validation for model development and early-stopping; this split is
+fixed (seeded) and reused across all experiments for comparability.
 
-SPLIT UNIT: session (common_feature_index), NOT row.
-  Every row belonging to the same common_feature_index shares the same
-  common_features blob (context/user-side attributes). Splitting by row
-  would put rows from the same session on both sides of the split and leak
-  session-level information from train into validation. So we first split
-  the ~19,550 unique sessions, then assign every row to whichever side its
-  session landed on.
+Split unit is session (common_feature_index), not row: rows sharing a
+common_feature_index share the same context/user-side features, so
+splitting by row would leak session-level information across the split.
+The ~19,550 unique sessions are split first, then every row is assigned to
+whichever side its session landed on.
 
-Note on cold items: qualifying items (K_ITEM>=50) are shared across the
-whole filtered file, so both Train and Validation should contain mostly
-the same item vocabulary (no session-based split affects item coverage).
-The genuine cold-start test happens later against the official test file,
-which is expected to contain items never seen in this filtered subset --
-that is precisely the scenario LLM-derived embeddings are meant to help
-with (RQ1), while pure ID-embedding baselines will need a fallback
-(e.g. UNK embedding) for unseen items.
-
-USAGE
------
-1. Make sure aliccp_filtered_joined.csv (from filter_and_join.py) is in the
-   same folder as this script, or update INPUT_PATH below.
-2. Run: python split_train_val.py
-   Expected runtime: well under a minute (single pass over 3.25M rows).
+Qualifying items (K_ITEM>=50) are shared across the whole filtered file, so
+Train/Validation share mostly the same item vocabulary — the genuine
+cold-start test happens later against the official test file.
 """
 import csv
 import os

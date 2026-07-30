@@ -1,16 +1,11 @@
 """
-Quick diagnostic: extended session-side k-core table, computed directly from
-the already-saved aliccp_degree_counters.pkl — no rescan of the 10GB skeleton
-file needed, runs in under a second.
+Extended session-side k-core threshold table, computed directly from the
+saved aliccp_degree_counters.pkl (no rescan of the 10GB skeleton file needed).
 
-Why this is needed: the first filter_and_join.py run (K_ITEM=50, K_SESSION=100)
-kept 9,964,603 rows — still ~2-5x above the ~2-5M target — while item/session
-entity counts (140,782 / 94,964) already landed inside the 50K-200K target.
-Since raising K_ITEM further would mostly just shrink the item vocabulary
-(which is already fine), the next move is to push K_SESSION higher — session
-degree is the main volume lever (see degree_distribution_scan.py docstring).
-This script extends that table past k=100 so you can pick a K_SESSION that
-gets rows into range without dropping session count too far below 50K.
+Session degree is the main lever for total row-count control (see
+degree_distribution_scan.py): item thresholds mostly affect vocabulary size,
+while session thresholds control row volume. This extends the marginal
+threshold table past k=100 to help pick a K_SESSION value.
 """
 import pickle
 

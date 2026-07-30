@@ -4,57 +4,34 @@ Ali-CCP LLM Encoder V1 — frozen small-LM item embeddings (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHAT THIS IS
--------------
-First LLM-embedding version, per the supervisor meeting: "do an initial
-version with a small LM e.g. BERT." Same ESMM-style two-tower architecture
-as the baseline (src/baselines/id_embedding_baseline.py), same train/val/
-test split, same evaluation protocol — the ONLY change is the item side:
+Item-only LLM-embedding variant: same ESMM-style two-tower architecture,
+train/val/test split, and evaluation protocol as the baseline
+(src/baselines/id_embedding_baseline.py) — the only change is the item side.
 
-  Baseline #1: item_id -> nn.Embedding (learned from scratch, UNK for
-               unseen items — this is exactly what fails on the 42.86%
-               cold-start test segment).
-  V1 (this):   item_id -> pseudo_text (from extract_item_pseudo_text.py)
-               -> frozen sentence-transformer embedding (all-MiniLM-L6-v2,
-               NOT fine-tuned) -> trainable Linear adapter -> same tower.
+  Baseline: item_id -> nn.Embedding (learned from scratch, UNK for unseen
+            items — fails on the 42.86% cold-start test segment).
+  V1 (this): item_id -> pseudo_text (from extract_item_pseudo_text.py) ->
+             frozen sentence-transformer embedding (all-MiniLM-L6-v2, not
+             fine-tuned) -> trainable Linear adapter -> same tower.
 
-User side is UNCHANGED (still a learned ID embedding) — this isolates the
-comparison to "does replacing the ITEM embedding with an LLM-derived one
-help", matching this project's most pressing open question.
+User side is unchanged (learned ID embedding), isolating the comparison to
+whether replacing the item embedding with an LLM-derived one helps.
 
-IMPORTANT CAVEAT (see profile_raw_fields.py / README "LLM text
-feasibility" note) — flag for supervisor discussion, not resolved here:
-Ali-CCP has no real item titles, only anonymised numeric feat_ids. The
-"pseudo_text" fed to the LM is template sentences like "This item's
-category is category_8316768, brand is brand_9247244." — real English
-scaffolding words, but out-of-vocabulary numeric IDs. This means any
-improvement here demonstrates "does a frozen LM's architecture/tokeniser
-handle this better than a from-scratch ID embedding table", NOT "does the
-LM's real-world semantic knowledge about products help" (which is the
-stronger claim UniSRec/RLMRec can make with real item text). Whatever the
-result, this distinction needs to be stated explicitly wherever this
-result is written up.
+Caveat (see profile_raw_fields.py): Ali-CCP has no real item titles, only
+anonymised numeric feat_ids. The pseudo-text template ("This item's category
+is category_8316768, brand is brand_9247244.") gives the LM real English
+scaffolding words but out-of-vocabulary numeric IDs — so this tests whether
+a frozen LM's architecture/tokeniser handles these IDs better than a
+from-scratch embedding table, not whether genuine pretrained world knowledge
+about products helps.
 
-WHY THIS SIDESTEPS THE COLD-START PROBLEM STRUCTURALLY
----------------------------------------------------------
-Because item_pseudo_text.csv has a row for EVERY item that appears in
-train, val, OR test (including the 42.86% cold-start test items — see
-extract_item_pseudo_text.py, which specifically scans the test skeleton
-file for items missing from train), there is no UNK/index-0 item embedding
-here at all: every test item, seen or cold-start, gets a real embedding
-derived from its own attributes. This is exactly the mechanism the whole
-exercise is testing.
+Because item_pseudo_text.csv covers every item across train/val/test
+(including cold-start test items), there is no UNK/index-0 item embedding
+here — every test item gets a real embedding derived from its own
+attributes, which is the mechanism this variant is testing.
 
-USAGE
------
-1. Make sure item_pseudo_text.csv exists (run extract_item_pseudo_text.py
-   first if not).
-2. pip install sentence-transformers   (pulls in transformers; torch
-   already installed from the baseline)
-3. Run: python llm_encoder_v1.py
-   First run downloads all-MiniLM-L6-v2 (~80MB) from HuggingFace.
-4. Send me the printed FINAL RESULTS — direct comparison point against
-   baseline #1's numbers (already in README).
+Requires item_pseudo_text.csv (from extract_item_pseudo_text.py) and
+sentence-transformers installed.
 """
 import json
 import os
@@ -377,9 +354,6 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved metrics to {METRICS_PATH}")
-    print("\nSend me this FINAL RESULTS block — I'll compare it directly against "
-          "baseline #1's numbers (already in README), especially the "
-          "test_cold_start_items row.")
 
 
 if __name__ == "__main__":

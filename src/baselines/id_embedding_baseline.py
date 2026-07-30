@@ -1,55 +1,32 @@
 """
-Ali-CCP Baseline #1 — Minimal ID-Embedding Model (ESMM-style, run locally)
+Ali-CCP Baseline — ID-Embedding ESMM Model (run locally)
 ============================================================================
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS DESIGN
-----------------
-The k-core-filtered dataset currently only carries scalar item_id/user_id
-(the full categorical feature blob hasn't been extracted yet — see "Known
-gap" in README). Rather than wait, this trains the simplest possible
-baseline on exactly what's available: user_id + item_id embeddings. Two
-things this doubles as, beyond "first working number":
-  1. The pure-ID reference point for RQ1 — once the LLM Encoder (V1)
-     replaces/augments these ID embeddings with text-derived ones, this is
-     the number it needs to beat, on the SAME train/val/test split.
-  2. A concrete measurement of the cold-start blind spot: 42.86% of the
-     official test set involves items never seen in training
-     (is_cold_start_item=1, see README). This baseline can only fall back
-     to an UNK item embedding for those rows — we report metrics split by
-     seen vs. cold-start specifically to quantify how much that costs.
+Pure-ID reference point for RQ1: trains on user_id + item_id embeddings only
+(no text features), on the same train/val/test split used by the LLM Encoder
+variants (V1/V1-Full/V2), so results are directly comparable. Also serves as
+the baseline measurement of the cold-start blind spot — 42.86% of the
+official test set involves items never seen in training (is_cold_start_item),
+which this model can only handle via a shared UNK embedding; metrics are
+reported split by seen vs. cold-start to quantify that cost.
 
-ARCHITECTURE — ESMM-style entire-space multi-task model (Ma et al., SIGIR
-2018, already in our literature review). Chosen over a single CTR-only
-model because CVR prediction is the dissertation's actual target quantity,
-and naively training a CVR model only on clicked rows suffers the sample
-selection bias ESMM was specifically designed to avoid:
-  - Shared embeddings: Embedding(user_id), Embedding(item_id), concatenated.
-  - Two MLP towers on top of the shared embedding: CTR tower -> p(click),
-    CVR tower -> p(purchase | click).
-  - p(purchase | impression) = p_ctr * p_cvr  ("CTCVR"), estimated over the
-    ENTIRE space (all impressions), not just clicked ones — this is exactly
-    ESMM's fix for sample selection bias.
-  - Loss = BCE(p_ctr, click_label) + BCE(p_ctr * p_cvr, purchase_label)
+Architecture: ESMM-style entire-space multi-task model (Ma et al., SIGIR
+2018). Shared user_id/item_id embeddings feed two MLP towers (CTR -> p(click),
+CVR -> p(purchase | click)); p(purchase | impression) = p_ctr * p_cvr is
+estimated over the entire impression space (not just clicked rows), which is
+ESMM's fix for the sample-selection bias of training CVR only on clicks.
+Loss = BCE(p_ctr, click) + BCE(p_ctr * p_cvr, purchase).
 
-UNKNOWN IDs: vocab is built from TRAIN ONLY. Any user_id/item_id in
-val/test not seen in train (including all cold-start test items) maps to
-index 0 (a shared UNK embedding) — this is the realistic deployment
-scenario and is exactly the mechanism whose cost we're measuring.
+Vocab is built from train only; any user_id/item_id unseen in train
+(including all cold-start test items) maps to a shared UNK embedding
+(index 0) — the realistic deployment scenario this baseline measures.
 
-USAGE
------
-1. Make sure aliccp_train_split.csv, aliccp_val_split.csv (from
-   split_train_val.py) and aliccp_test_filtered_joined.csv (from
-   filter_test_and_join.py) are all in WORK_DIR below.
-2. pip install torch scikit-learn pandas   (if not already installed)
-3. Run: python id_embedding_baseline.py
-   Expected runtime on a GPU: a few minutes for ~10 epochs over 2.9M rows.
-   On CPU: expect 10-30x slower — reduce EPOCHS or BATCH_SIZE if needed.
-4. Send me the printed final metrics (val + test overall + test seen/
-   cold-start breakdown) — I'll write these into README/Overleaf and we'll
-   use the saved vocab + checkpoint as the comparison point for V1.
+Requires aliccp_train_split.csv, aliccp_val_split.csv (from
+split_train_val.py) and aliccp_test_filtered_joined.csv (from
+filter_test_and_join.py) in WORK_DIR. Saves vocab + checkpoint for reuse by
+the LLM Encoder scripts.
 """
 import json
 import os
@@ -294,8 +271,6 @@ def main():
         json.dump(results, f, indent=2)
     print(f"\nSaved metrics to {METRICS_PATH}")
     print(f"Saved best checkpoint to {CHECKPOINT_PATH}")
-    print("\nSend me the printed FINAL RESULTS block above — I'll write it into "
-          "README/Overleaf and we'll use this as the comparison point for LLM Encoder V1.")
 
 
 if __name__ == "__main__":

@@ -4,51 +4,30 @@ Ali-CCP User Pseudo-Text Extraction (run locally)
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
-WHY THIS SCRIPT EXISTS
-------------------------
-Completes the "extract full categorical feature set" todo (item side was
-done by extract_item_pseudo_text.py). This does the USER side, using the
-8 demographic fields identified in profile_raw_fields.py — these decode
-with materially HIGHER confidence than the item-side fields, because their
-cardinality AND missingness pattern match Alimama's separately-published
-`user_profile.csv` schema field-for-field (see README "LLM text
-feasibility" note): 121=cms_segid(97), 122=cms_group_id(13), 124=gender(2),
-125=age_level(7), 126=pvalue_level(3, sparse), 127=shopping_level(3),
-128=occupation(2), 129=city_tier(4, semi-sparse). Same underlying caveat as
-the item side still applies though: all values are anonymised feat_ids
-with no public decoder, so this is still template pseudo-text, not real
-natural-language profiles.
+Completes the categorical feature extraction started by
+extract_item_pseudo_text.py, for the user side. Uses the 8 demographic
+fields identified in profile_raw_fields.py, which decode with materially
+higher confidence than the item-side fields because their cardinality and
+missingness pattern match Alimama's separately-published `user_profile.csv`
+schema field-for-field: 121=cms_segid(97), 122=cms_group_id(13),
+124=gender(2), 125=age_level(7), 126=pvalue_level(3, sparse),
+127=shopping_level(3), 128=occupation(2), 129=city_tier(4, semi-sparse).
+Same caveat as the item side: all values are anonymised feat_ids with no
+public decoder, so this is still template pseudo-text.
 
-SECOND BENEFIT: fixes the user-side cold-start gap
------------------------------------------------------
-Baseline #1's train vocabulary only covers 9,074 users (vs. 140,092 items)
-— we flagged this as a likely contributor to the val->test generalisation
-gap (unseen users in test get the same zero-vector UNK problem unseen
-items do). Building text for every user_id across train/val/test (not just
-train) fixes this the same way item pseudo-text fixed item cold-start:
-every user gets a real embedding derived from their own demographic
-fields, not a fallback.
+Also fixes the user-side cold-start gap: the baseline's train vocabulary
+only covers 9,074 users (vs. 140,092 items), a likely contributor to the
+val->test generalisation gap. Building text for every user_id across
+train/val/test gives every user a real embedding derived from their own
+demographic fields, the same way item pseudo-text fixed item cold-start.
 
-WHAT THIS DOES
----------------
+Steps:
 1. Reads user_id from aliccp_train_split.csv/aliccp_val_split.csv/
-   aliccp_test_filtered_joined.csv to build the needed set (union).
-2. Streams common_features_train.csv ONCE, recording the 8 demographic
-   fields for any needed user_id not yet found (first-seen wins — these
-   fields should be stable per user across sessions).
+   aliccp_test_filtered_joined.csv to build the union set of needed users.
+2. Streams common_features_train.csv once, recording the 8 demographic
+   fields for any needed user_id not yet found (first-seen wins).
 3. Streams common_features_test.csv for any still-missing user_ids.
 4. Writes user_pseudo_text.csv: user_id, pseudo_text.
-
-Uses the SAME counter-based early-stop pattern as extract_item_pseudo_text.py
-(fixed 2026-07-21 after the first version recomputed a full set difference
-every row and never finished — see that script's history).
-
-HOW TO RUN
-----------
-python extract_user_pseudo_text.py
-Expected runtime: common_features files are much smaller than skeleton
-(~730K / ~similar rows vs 42-43M), so this should be considerably faster
-than the item extraction — likely well under a minute per file.
 """
 import csv
 import os
