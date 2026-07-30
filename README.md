@@ -208,9 +208,11 @@ Both underperform the ID baseline — replacing ID embeddings with frozen text e
 |---|---|---|
 | V2 | 0.5561 | ~parity (only LLM variant not clearly below baseline) |
 
-### Candidate encoder shortlist (for possible MiniLM replacement)
+### Candidate encoder shortlist ("Different Embedders" experiment, in progress)
 
-MPNet, BGE, E5, GTE, EmbeddingGemma shortlisted as sentence-embedding alternatives to MiniLM. XLNet evaluated and ruled out as unsuitable for direct sentence-embedding use. MPNet re-run of V2 not yet done.
+MPNet, BGE, E5, GTE, EmbeddingGemma shortlisted as sentence-embedding alternatives to MiniLM. XLNet evaluated and ruled out as unsuitable for direct sentence-embedding use.
+
+`src/models/llm_encoder_v2_mpnet.py` added (2026-07-30): identical to `llm_encoder_v2_aligned.py` (V2) with the frozen encoder swapped from `all-MiniLM-L6-v2` (384-dim) to `all-mpnet-base-v2` (768-dim); writes to a separate `v2_mpnet_results/` directory so it doesn't overwrite the MiniLM checkpoint. V2 was chosen as the base for this comparison because it's the only LLM variant that matched or beat the ID baseline, making it the more informative test of whether encoder quality — as opposed to the anonymised-ID pseudo-text ceiling itself — is the binding constraint. Not yet run (needs local GPU); compare `v2_mpnet_results/esmm_v2_mpnet_metrics.json` against `v2_results/esmm_v2_aligned_metrics.json` once it is. BGE/E5/GTE/EmbeddingGemma variants not yet implemented — pending the MPNet result and time.
 
 ### Test-set difficulty segmentation (context-length × cold-start, 2×2)
 
@@ -279,11 +281,25 @@ Checked whether anything would actually block a GitHub push or a from-scratch ex
 
 ## Open Questions for Supervisor
 
-- Bring in a second, real-text dataset (e.g. Amazon Reviews / MIND) to isolate RQ1's text-vs-ID question, or accept the Ali-CCP templated-pseudo-text limitation and continue?
-- Turn the short-context+cold-start crossover (V1/V1-Full > V2) into a hybrid V3, or keep it as a Discussion-section observation?
-- The "multi-dataset × multi-model" evaluation matrix hasn't started — depends on the first question above.
-- MPNet-for-MiniLM V2 re-run — not done yet, time-permitting.
+- Turn the short-context+cold-start crossover (V1/V1-Full > V2) into a hybrid V3, or keep it as a Discussion-section observation? (Deferred per 2026-07-30 meeting todo — depends on the two items below landing first.)
+- The "multi-dataset × multi-model" evaluation matrix hasn't started — depends on the second-dataset decision below.
+- MPNet-for-MiniLM V2 re-run — script written (`llm_encoder_v2_mpnet.py`), not yet run locally.
 - Overleaf template — link and content both pending, tracked under "Next Steps" (see Modelling Results → Overleaf preparation).
+
+### Second real-text dataset — research + recommendation (2026-07-30)
+
+Compared Amazon Reviews'23 and MIND as candidates to isolate RQ1 (text vs. ID embeddings) from Ali-CCP's anonymised-pseudo-text ceiling:
+
+| | Amazon Reviews'23 | MIND |
+|---|---|---|
+| Real text | Yes — item title, description, category, brand | Yes — news title, abstract, body |
+| Domain match to Ali-CCP | Same (e-commerce) | Different (news) |
+| Scale (usable subset) | Single category, 5-core filtered: tens of thousands to ~1M interactions (e.g. "Beauty", "Video_Games") — full dataset is 750GB but not needed | ~15M impressions / 1M users full-size; MIND-small (50K users) available |
+| Native label structure | Ratings/reviews = positive interactions only, no negative/non-purchase impressions — doesn't natively fit ESMM's click→purchase funnel | Has real impression-level click/no-click (CTR-analogous) but no post-click "purchase"/conversion stage |
+| Prior use in this dissertation's lit review | Yes — UniSRec and RLMRec (both core citations) both benchmark on Amazon category subsets | Not currently cited |
+| Adaptation cost | Moderate: need negative sampling to turn implicit positives into a binary task (standard practice, well precedented) | Moderate-high: CTR side maps directly, but CVR side has no analog — would need a proxy conversion definition, undermining the "real conversion" purpose of using a second dataset at all |
+
+**Recommendation: Amazon Reviews'23, a single small category (e.g. Beauty or Video_Games, 5-core filtered).** Neither dataset has Ali-CCP's native two-stage click→purchase funnel, so this experiment is necessarily reframed as testing RQ1's general claim (text embeddings beat ID embeddings, especially for sparse/cold-start entities) via a binary interaction-prediction task with sampled negatives, rather than a literal CVR replication — that reframing should be stated explicitly wherever this is written up. Amazon Reviews wins on domain match, adaptation cost, and direct precedent in already-cited work (UniSRec/RLMRec); MIND's lack of any conversion-stage analog is the harder problem to justify away. Not yet built — pending confirmation of this recommendation and the specific category before writing the download/preprocessing pipeline.
 
 ---
 
@@ -312,7 +328,8 @@ dissertation-cvr-llm/
 │   └── models/
 │       ├── llm_encoder_v1.py
 │       ├── llm_encoder_v1_full.py
-│       └── llm_encoder_v2_aligned.py
+│       ├── llm_encoder_v2_aligned.py
+│       └── llm_encoder_v2_mpnet.py                    # NEW (2026-07-30) — "Different Embedders" experiment
 └── docs/
     ├── references.bib
     └── methods_results_draft.tex
@@ -381,8 +398,8 @@ Note: `Dataset/` (raw Ali-CCP + Criteo files, ~15GB) is gitignored and lives onl
 - [x] V2 — RLMRec-style ID+text alignment (≈ parity with baseline, best overall)
 - [x] Test-set difficulty segmentation (context-length × cold-start 2×2) — V1/V1-Full beat V2 in hardest cell
 - [x] Full modelling pipeline code recovered (2026-07-30, two `code_for_github` syncs) — all preprocessing, baseline, V1/V1-Full/V2, and evaluation scripts now in this repo and verified against the data; only `degree_distribution_scan_test.py` still missing (non-blocking, its output already exists) — see "Known Gaps"
-- [ ] Second real-text dataset decision (pending supervisor input)
-- [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy
+- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (MPNet script written, not yet run — see Candidate encoder shortlist), "Text/no text dataset" (second real-text dataset — see Open Questions), "Implement hybrid V3?" (deferred, depends on the first two)
+- [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy; also on the post-meeting todo ("Move report draft to Overleaf, share with AS", "Review methods & Results next week", "Define cold start")
 - [ ] Dissertation write-up
 
 ---
