@@ -1,5 +1,5 @@
 """
-Amazon Reviews'23 (Digital_Music) Baseline — ID-Embedding Binary Classifier
+Amazon Reviews'23 (Video_Games) Baseline — ID-Embedding Binary Classifier
 ============================================================================
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
@@ -224,7 +224,7 @@ def main():
     results["test_cold_start_items"] = compute_metrics(preds, labels, mask=test_cold_mask)
 
     print("\n" + "=" * 70)
-    print("FINAL RESULTS (Amazon Digital_Music — ID-embedding baseline)")
+    print("FINAL RESULTS (Amazon Video_Games — ID-embedding baseline)")
     print("=" * 70)
     print(json.dumps(results, indent=2))
 

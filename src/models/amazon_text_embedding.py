@@ -1,5 +1,5 @@
 """
-Amazon Reviews'23 (Digital_Music) — Real-Text Item Embedding
+Amazon Reviews'23 (Video_Games) — Real-Text Item Embedding
 ============================================================================
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
@@ -85,14 +85,30 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Frozen item LLM embeddings
 # ------------------------------------------------------------------
 def build_item_llm_embeddings():
-    if os.path.exists(ITEM_EMBED_CACHE):
-        print(f"Loading cached item LLM embeddings from {ITEM_EMBED_CACHE} ...")
-        with open(ITEM_EMBED_CACHE, "rb") as f:
-            return pickle.load(f)
-
     print(f"Loading {ITEM_TEXT_PATH} ...")
     df = pd.read_csv(ITEM_TEXT_PATH, dtype={"item_id": str, "real_text": str})
     print(f"  {len(df):,} distinct items")
+
+    if os.path.exists(ITEM_EMBED_CACHE):
+        with open(ITEM_EMBED_CACHE, "rb") as f:
+            cached = pickle.load(f)
+        # The cache isn't namespaced by CATEGORY/dataset, so a stale cache from a
+        # previous run (e.g. the earlier Digital_Music attempt) would silently
+        # get reused here: item ids wouldn't match, every lookup would fall back
+        # to unk_row (an all-zero vector), and the model would see a constant
+        # item representation for everything — exactly the "val AUC stuck at
+        # 0.5000 every epoch" symptom seen when this went undetected. Validate
+        # the cache actually covers the current item set before trusting it.
+        cached_ids = set(cached["item_id_to_row"].keys())
+        current_ids = set(df["item_id"])
+        if cached_ids >= current_ids:
+            print(f"Loading cached item LLM embeddings from {ITEM_EMBED_CACHE} ...")
+            return cached
+        else:
+            print(f"Cached embeddings at {ITEM_EMBED_CACHE} don't cover the current "
+                  f"item set ({len(cached_ids & current_ids):,}/{len(current_ids):,} "
+                  f"items match) — stale cache from a different CATEGORY/run, "
+                  f"re-encoding instead of trusting it.")
 
     print(f"Loading sentence-transformer '{LM_NAME}' (frozen) ...")
     model = SentenceTransformer(LM_NAME, device=str(DEVICE))
@@ -277,7 +293,7 @@ def main():
     results["test_cold_start_items"] = compute_metrics(preds, labels, mask=test_cold_mask)
 
     print("\n" + "=" * 70)
-    print("FINAL RESULTS (Amazon Digital_Music — real-text item embedding)")
+    print("FINAL RESULTS (Amazon Video_Games — real-text item embedding)")
     print("=" * 70)
     print(json.dumps(results, indent=2))
 

@@ -10,15 +10,21 @@ experiment — a second, real-text dataset used to isolate RQ1 (does
 replacing ID embeddings with text embeddings help) from Ali-CCP's
 anonymised-pseudo-text ceiling.
 
-Category chosen: Digital_Music (101.0K users, 70.5K items, 130.4K ratings
-per the official per-category statistics table) — deliberately one of the
-smallest categories with a still-reasonably-sized item catalog, to keep the
-download and downstream processing lightweight (contrast: Ali-CCP's raw
-files were ~40GB; this category's compressed review+meta files are
-expected in the tens-to-low-hundreds of MB range). Change CATEGORY below to
-try a different one — see the per-category table at
-https://amazon-reviews-2023.github.io/main.html before doing so, to check
-its size first.
+Category chosen: Video_Games (2.8M users, 137.2K items, 4.6M ratings per
+the official per-category statistics table). First attempt used
+Digital_Music (101.0K users, 70.5K items, 130.4K ratings) for its small
+footprint, but its verified-purchase interaction graph turned out too
+sparse to be useful: mean ~1.2 interactions/user collapsed to 0 rows under
+even a 4-core filter, and the 2-core dataset it did produce (4,160 rows)
+was too small for either baseline to learn signal above chance (AUC ~0.50
+for both ID and text embeddings — see README "Amazon pipeline status").
+Video_Games has ~33.5 ratings/item on average (vs ~1.87 for Digital_Music)
+giving much more collaborative signal to learn from, while still being two
+orders of magnitude smaller than the largest categories (Books, Clothing,
+Home_and_Kitchen), keeping the "control dataset volume" constraint
+reasonable. Change CATEGORY below to try a different one — see the
+per-category table at https://amazon-reviews-2023.github.io/main.html
+before doing so, to check its size first.
 
 Tries huggingface_hub first (the officially recommended access method),
 falling back to a direct HTTPS download if huggingface_hub isn't
@@ -34,7 +40,7 @@ import shutil
 import time
 import urllib.request
 
-CATEGORY = "Digital_Music"
+CATEGORY = "Video_Games"
 
 WORK_DIR = r"D:\Study\migration_package\processed_data"
 AMAZON_DIR = os.path.join(WORK_DIR, "amazon")
@@ -54,8 +60,12 @@ META_JSONL = os.path.join(RAW_DIR, f"meta_{CATEGORY}.jsonl")
 
 # Sanity-check ceiling: abort if either downloaded file is bigger than this
 # (catches an accidental category swap to something much larger, e.g.
-# Books or Electronics, before it eats disk/bandwidth).
-MAX_EXPECTED_GZ_BYTES = 2 * 1024 ** 3  # 2GB
+# Books or Electronics, before it eats disk/bandwidth). Video_Games'
+# review file is ~35x Digital_Music's by rating count, so this ceiling is
+# raised from the original 2GB to give it headroom while still catching a
+# mistaken swap to a truly huge category (Books, Clothing, Home_and_Kitchen
+# are each another order of magnitude beyond Video_Games).
+MAX_EXPECTED_GZ_BYTES = 4 * 1024 ** 3  # 4GB
 
 
 def download_via_hub():
@@ -99,8 +109,14 @@ def main():
     if not (os.path.exists(REVIEW_GZ) and os.path.exists(META_GZ)):
         try:
             download_via_hub()
-        except ImportError:
-            print("huggingface_hub not installed (pip install huggingface_hub); "
+        except Exception as e:
+            # Broad catch, not just ImportError: the HF hub copy of this dataset
+            # is stored as plain .jsonl (no .gz), so a hub lookup for the .gz
+            # filename this script expects 404s for every category (confirmed
+            # against the HF file listing) — always falls through to the direct
+            # URL below, which does serve genuine .jsonl.gz per the official
+            # per-category table at https://amazon-reviews-2023.github.io/main.html.
+            print(f"huggingface_hub download failed ({type(e).__name__}: {e}); "
                   "falling back to direct URL download.")
             download_via_url(REVIEW_URL, REVIEW_GZ)
             download_via_url(META_URL, META_GZ)

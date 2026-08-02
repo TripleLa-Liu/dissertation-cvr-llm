@@ -1,14 +1,11 @@
 """
-Amazon Reviews'23 (Digital_Music) — Dataset Construction (run locally)
+Amazon Reviews'23 (Video_Games) — Dataset Construction (run locally)
 =========================================================================
 Dissertation: LLM-Enhanced Dynamic Graph Networks for CVR Prediction
 Author: Liu Yize | UCL MSc KIDS
 
 Builds the modelling-ready dataset for the "Text/no text dataset"
-experiment from the raw files downloaded by amazon_download.py. One script
-(not several, unlike the Ali-CCP pipeline) because this category is small
-enough (hundreds of thousands of rows, not tens of millions) that a single
-in-memory pandas pass is sufficient — no chunked/resumable scanning needed.
+experiment from the raw files downloaded by amazon_download.py.
 
 Design decisions (documented, not validated against a supervisor
 discussion the way the Ali-CCP choices were — flag for review):
@@ -22,14 +19,31 @@ discussion the way the Ali-CCP choices were — flag for review):
    TEST_FRAC of interactions by timestamp are held out as test, the next
    VAL_FRAC as validation, and the rest as train — an improvement over
    Ali-CCP's non-temporal official train/test boundary.
-3. k-core filtering (K_CORE=5, applied iteratively to both users and items
-   until stable) on the full interaction set before splitting, matching
-   the "5-core" convention the Amazon Reviews'23 release itself uses for
-   benchmarking.
-4. Item vocabulary for cold-start flagging is built from TRAIN only (same
+3. k-core filtering, applied iteratively to both users and items until
+   stable. **K_CORE is NOT hardcoded to the Amazon Reviews'23 release's own
+   "5-core" convention** — a first attempt used Digital_Music, whose
+   verified-purchase subset (94,954 interactions / 79,404 users / 50,878
+   items, mean ~1.2-1.9 interactions per entity) showed iterative 5-core
+   collapsing to 0 rows, and even the 2-core result that did survive (4,160
+   rows) was too sparse for either baseline to learn signal above chance
+   (AUC ~0.50 — see README "Amazon pipeline status"). Switched to
+   Video_Games (137.2K items / 4.6M ratings overall, i.e. ~33.5
+   ratings/item vs Digital_Music's ~1.87) for a denser collaborative
+   signal. `scan_core_sizes()` below still prints achievable sizes for a
+   range of k so K_CORE is picked empirically per the same "scan before you
+   filter" practice used for Ali-CCP (degree_distribution_scan.py /
+   check_session_thresholds.py), rather than assumed.
+4. RAW_SAMPLE_MAX_USERS caps dataset volume up front (per the "control
+   dataset volume" requirement) by randomly sampling whole users — not
+   randomly sampling rows — from the raw verified-purchase interactions
+   before k-core filtering. Sampling by user preserves each sampled user's
+   full interaction history so density (the thing Digital_Music lacked)
+   isn't destroyed by the subsampling itself; row-level random sampling
+   would have made the sparsity problem worse, not better.
+5. Item vocabulary for cold-start flagging is built from TRAIN only (same
    pattern as Ali-CCP's is_cold_start_item), so val/test items unseen in
    train are flagged is_cold_start_item=1.
-5. This dataset has no natural negative examples (a review only exists for
+6. This dataset has no natural negative examples (a review only exists for
    an item the user did interact with), so negatives are sampled uniformly
    at random from the full item catalog per positive row (ratio
    NEG_PER_POS, default 4), excluding items that user already has a
@@ -56,7 +70,7 @@ import time
 
 import pandas as pd
 
-CATEGORY = "Digital_Music"
+CATEGORY = "Video_Games"
 
 WORK_DIR = r"D:\Study\migration_package\processed_data"
 AMAZON_DIR = os.path.join(WORK_DIR, "amazon")
@@ -72,11 +86,18 @@ VAL_OUT = os.path.join(PROCESSED_DIR, "amazon_val.csv")
 TEST_OUT = os.path.join(PROCESSED_DIR, "amazon_test.csv")
 ITEM_TEXT_OUT = os.path.join(PROCESSED_DIR, "amazon_item_text.csv")
 
-K_CORE = 5
+K_CORE = 2          # see scan_core_sizes() output before trusting this
+CORE_SCAN_KS = [2, 3, 4, 5]   # candidate thresholds printed for comparison, see main()
 TEST_FRAC = 0.10
 VAL_FRAC = 0.10
 NEG_PER_POS = 4
 SEED = 42
+
+# Video_Games' raw verified-purchase pool is much larger than Digital_Music's
+# (millions vs ~95K interactions) — cap it up front by randomly sampling
+# whole users (see design decision #4 above) so the final dataset stays
+# controlled in volume without re-introducing the sparsity problem.
+RAW_SAMPLE_MAX_USERS = 150_000
 
 
 # ------------------------------------------------------------------
@@ -105,14 +126,25 @@ def load_positive_interactions():
     print(f"  {len(df):,} verified-purchase interactions "
           f"({df['user_id'].nunique():,} users, {df['item_id'].nunique():,} items) "
           f"in {time.time()-t0:.0f}s")
+
+    n_users = df["user_id"].nunique()
+    if n_users > RAW_SAMPLE_MAX_USERS:
+        rng = random.Random(SEED)
+        all_users = sorted(df["user_id"].unique())  # sort first: set/unique order isn't stable
+        sampled_users = set(rng.sample(all_users, RAW_SAMPLE_MAX_USERS))
+        df = df[df["user_id"].isin(sampled_users)].reset_index(drop=True)
+        print(f"  Sampled down to {RAW_SAMPLE_MAX_USERS:,} users (whole interaction "
+              f"histories kept, not row-sampled) -> {len(df):,} interactions "
+              f"({df['item_id'].nunique():,} items)")
     return df
 
 
 # ------------------------------------------------------------------
 # Step 2: iterative k-core filtering
 # ------------------------------------------------------------------
-def k_core_filter(df, k):
-    print(f"\nApplying {k}-core filtering (iterative) ...")
+def k_core_filter(df, k, verbose=True):
+    if verbose:
+        print(f"\nApplying {k}-core filtering (iterative) ...")
     round_i = 0
     while True:
         round_i += 1
@@ -122,11 +154,28 @@ def k_core_filter(df, k):
         keep_users = set(user_counts[user_counts >= k].index)
         keep_items = set(item_counts[item_counts >= k].index)
         df = df[df["user_id"].isin(keep_users) & df["item_id"].isin(keep_items)]
-        print(f"  round {round_i}: {n_before:,} -> {len(df):,} rows "
-              f"({df['user_id'].nunique():,} users, {df['item_id'].nunique():,} items)")
+        if verbose:
+            print(f"  round {round_i}: {n_before:,} -> {len(df):,} rows "
+                  f"({df['user_id'].nunique():,} users, {df['item_id'].nunique():,} items)")
         if len(df) == n_before:
             break
     return df
+
+
+def scan_core_sizes(df, ks):
+    """Report the converged k-core size for each candidate k, WITHOUT
+    committing to one — run before picking K_CORE, same "scan before you
+    filter" practice as Ali-CCP's degree_distribution_scan.py. Cheap at
+    this dataset's scale (each k is a fresh filter pass on a copy)."""
+    print(f"\nScanning candidate k-core thresholds {ks} (each on a fresh copy) ...")
+    print(f"{'k':>4} | {'rows':>10} | {'users':>10} | {'items':>10}")
+    print("-" * 45)
+    for k in ks:
+        filtered = k_core_filter(df.copy(), k, verbose=False)
+        print(f"{k:>4} | {len(filtered):>10,} | {filtered['user_id'].nunique():>10,} | "
+              f"{filtered['item_id'].nunique():>10,}")
+    print("\nPick K_CORE above based on this table (need enough rows/items for a "
+          "meaningful train/val/test split and cold-start segment) before continuing.")
 
 
 # ------------------------------------------------------------------
@@ -207,7 +256,15 @@ def main():
     rng = random.Random(SEED)
 
     df = load_positive_interactions()
+    scan_core_sizes(df, CORE_SCAN_KS)
     df = k_core_filter(df, K_CORE)
+    if len(df) < 100:
+        raise SystemExit(
+            f"\nOnly {len(df):,} rows survived {K_CORE}-core filtering — too few for a "
+            f"meaningful train/val/test split. Check the scan table above, lower K_CORE, "
+            f"or reconsider CATEGORY (see README 'Second real-text dataset' section for "
+            f"the size/density trade-off across categories). Refusing to write empty/near-"
+            f"empty CSVs silently.")
     train_df, val_df, test_df = chronological_split(df)
 
     # cold-start vocabulary from TRAIN only, same pattern as Ali-CCP

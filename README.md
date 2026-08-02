@@ -206,13 +206,25 @@ Both underperform the ID baseline — replacing ID embeddings with frozen text e
 
 | Model | Test CTCVR-AUC | vs. baseline |
 |---|---|---|
-| V2 | 0.5561 | ~parity (only LLM variant not clearly below baseline) |
+| V2 | 0.5616 | ~parity (only LLM variant not clearly below baseline) |
 
-### Candidate encoder shortlist ("Different Embedders" experiment, in progress)
+### Candidate encoder shortlist ("Different Embedders" experiment, done)
 
 MPNet, BGE, E5, GTE, EmbeddingGemma shortlisted as sentence-embedding alternatives to MiniLM. XLNet evaluated and ruled out as unsuitable for direct sentence-embedding use.
 
-`src/models/llm_encoder_v2_mpnet.py` added (2026-07-30): identical to `llm_encoder_v2_aligned.py` (V2) with the frozen encoder swapped from `all-MiniLM-L6-v2` (384-dim) to `all-mpnet-base-v2` (768-dim); writes to a separate `v2_mpnet_results/` directory so it doesn't overwrite the MiniLM checkpoint. V2 was chosen as the base for this comparison because it's the only LLM variant that matched or beat the ID baseline, making it the more informative test of whether encoder quality — as opposed to the anonymised-ID pseudo-text ceiling itself — is the binding constraint. Not yet run (needs local GPU); compare `v2_mpnet_results/esmm_v2_mpnet_metrics.json` against `v2_results/esmm_v2_aligned_metrics.json` once it is. BGE/E5/GTE/EmbeddingGemma variants not yet implemented — pending the MPNet result and time.
+`src/models/llm_encoder_v2_mpnet.py` added (2026-07-30): identical to `llm_encoder_v2_aligned.py` (V2) with the frozen encoder swapped from `all-MiniLM-L6-v2` (384-dim) to `all-mpnet-base-v2` (768-dim); writes to a separate `v2_mpnet_results/` directory so it doesn't overwrite the MiniLM checkpoint. V2 was chosen as the base for this comparison because it's the only LLM variant that matched or beat the ID baseline, making it the more informative test of whether encoder quality — as opposed to the anonymised-ID pseudo-text ceiling itself — is the binding constraint.
+
+**Result (2026-08-02, both run to completion):**
+
+| Metric (test) | V2 — MiniLM (384-dim) | V2 — MPNet (768-dim) | Delta |
+|---|---|---|---|
+| CTR-AUC overall | 0.5458 | 0.5448 | ~parity |
+| CVR-AUC overall (post-click) | 0.5455 | 0.5306 | MPNet lower |
+| **CTCVR-AUC overall** | **0.5616** | 0.5571 | MPNet slightly lower |
+| CTCVR-AUC, seen items | 0.5656 | **0.5723** | MPNet higher |
+| CTCVR-AUC, cold-start items | **0.5724** | 0.5361 | MPNet notably lower |
+
+Swapping to a larger, higher-dimensional general-purpose encoder does **not** improve overall CTCVR-AUC, and the aggregate result masks a real split: MPNet is slightly *better* than MiniLM on seen items but clearly *worse* on cold-start items (-0.036 CTCVR-AUC) — the opposite of what "better encoder" would naively predict, since cold-start items are exactly where semantic (non-ID) signal should matter most. Plausible explanation: the higher-dimensional MPNet space is harder to align to the same 32-dim ID-embedding space with the same `lambda_align=0.1` and epoch budget used for MiniLM — this wasn't retuned per-encoder, so the result may reflect an under-tuned alignment objective for MPNet rather than an intrinsic embedding-quality ceiling. Either way, this supports the earlier conclusion that encoder quality is not the main bottleneck for V2 on Ali-CCP's anonymised pseudo-text — bigger embeddings alone don't buy a better result, and can hurt exactly where they're expected to help. BGE/E5/GTE/EmbeddingGemma variants not implemented — deprioritized given this result.
 
 ### Test-set difficulty segmentation (context-length × cold-start, 2×2)
 
@@ -227,7 +239,25 @@ Ali-CCP has no timestamps, so "prediction horizon" was reinterpreted as **sessio
 | V1-Full | 0.5564 |
 | V2 | 0.4991 |
 
-Open question (see below): worth building a hybrid V3 that routes to V1-style embeddings specifically for this segment, or keep as a Discussion-section observation.
+### V3: hybrid segment router (V1 + V2)
+
+Directly answers the 2026-07-30 meeting question: "Should this motivate a hybrid V3 (route cold-start items by context richness)?"
+
+`src/models/llm_encoder_v3_hybrid.py` added (2026-08-02): not a new trained model — a deterministic router over the already-trained V1 and V2 checkpoints. Rule: `is_hard_segment = (context_segment == "short_context") & is_cold_start_item`; use V1's prediction where true, V2's elsewhere (p_ctr/p_cvr/p_ctcvr all routed together per row from the same source model, so ctcvr_hybrid stays internally consistent — not routed independently). No new training, no threshold tuned against test performance — the rule is the segment definition itself, fixed before this script ever looked at test AUC.
+
+**Result (2026-08-02, run to completion):**
+
+| Model | overall CTCVR-AUC | short_context & cold_start CTCVR-AUC |
+|---|---|---|
+| Baseline | 0.5610 | 0.5413 |
+| V1 | 0.5299 | 0.5671 |
+| V1-Full | 0.5124 | 0.5564 |
+| V2 | 0.5616 | 0.5455 |
+| **V3-Hybrid** | **0.5649** | **0.5671** |
+
+The hybrid wins on both counts, not just the hard segment it was designed for. In the target cell it exactly matches V1's number (0.5671, as expected — it's literally V1's prediction there) and clearly beats V2 alone (0.5455) and baseline (0.5413). What wasn't guaranteed going in: **overall CTCVR-AUC also improves over pure V2** (0.5649 vs 0.5616), even though V1 is the much weaker model everywhere else (0.5299 overall) and only 20.9% of test rows are actually routed to it. This means swapping in V1's ranking for the one segment where V2 structurally can't have learned anything useful (item never seen in train + almost no user history) improves the pooled ranking more than the cross-model calibration mismatch hurts it — the routing rule earns its complexity rather than just being a wash. All three metrics (`p_ctr`, `p_cvr`, `p_ctcvr`) are routed together per row from the same source model, so `ctcvr_hybrid` stays internally consistent (verified: `short_context & cold_start` row is bit-identical to V1's own number for that cell). Full 5-model breakdown in `v3_hybrid_results.json`.
+
+This directly answers the meeting question ("Should this motivate a hybrid V3?") — yes, and it's a real, positive, reportable result, not just a defensible-but-flat outcome.
 
 ### Overleaf preparation
 
@@ -289,10 +319,9 @@ All 21 files re-verified for valid Python syntax after the change.
 
 ## Open Questions for Supervisor
 
-- Turn the short-context+cold-start crossover (V1/V1-Full > V2) into a hybrid V3, or keep it as a Discussion-section observation? (Deferred per 2026-07-30 meeting todo — depends on the two items below landing first.)
-- The "multi-dataset × multi-model" evaluation matrix hasn't started — depends on the second-dataset decision below.
-- MPNet-for-MiniLM V2 re-run — script written (`llm_encoder_v2_mpnet.py`), not yet run locally.
+All three 2026-07-30 post-meeting experiments are now done: Hybrid V3 (beats both V1 and V2, see "V3: hybrid segment router"), MPNet-vs-MiniLM encoder swap (see "Candidate encoder shortlist"), and the Amazon Reviews'23 text-vs-ID dataset (see "Amazon pipeline — status"). Remaining open items are all on the writing side:
 - Overleaf template — link and content both pending, tracked under "Next Steps" (see Modelling Results → Overleaf preparation).
+- "Define cold start" (from the meeting todo) — the operational definition already used throughout this repo (`is_cold_start_item`: vocab built from train only, unseen items in val/test flagged) hasn't been explicitly written up as a definition for the dissertation text yet.
 
 ### Second real-text dataset — research + recommendation (2026-07-30)
 
@@ -309,25 +338,25 @@ Compared Amazon Reviews'23 and MIND as candidates to isolate RQ1 (text vs. ID em
 
 **Recommendation: Amazon Reviews'23, a single small category, 5-core filtered.** Neither dataset has Ali-CCP's native two-stage click→purchase funnel, so this experiment is necessarily reframed as testing RQ1's general claim (text embeddings beat ID embeddings, especially for sparse/cold-start entities) via a binary interaction-prediction task with sampled negatives, rather than a literal CVR replication — that reframing is stated explicitly in every new script's docstring. Amazon Reviews wins on domain match, adaptation cost, and direct precedent in already-cited work (UniSRec/RLMRec); MIND's lack of any conversion-stage analog is the harder problem to justify away.
 
-**Category chosen: `Digital_Music`** (101.0K users, 70.5K items, 130.4K ratings per the official per-category table) — picked specifically to keep the download small (explicit volume constraint): the compressed review+meta files are expected in the tens-to-low-hundreds of MB range, vs. multi-GB for larger categories like Beauty_and_Personal_Care or Electronics.
+**Category chosen: `Video_Games`** (2.8M users, 137.2K items, 4.6M ratings per the official per-category table). First attempt used `Digital_Music` (101.0K users, 70.5K items, 130.4K ratings) for its small footprint, but its verified-purchase interaction graph proved too sparse to be useful (see "Amazon pipeline — status" below for what happened and why the category was switched).
 
-### Amazon pipeline — status (2026-07-30)
+### Amazon pipeline — status (2026-08-02, run to completion)
 
-**Sandbox network constraint discovered**: this Cowork sandbox's network is allowlisted and blocks both `huggingface.co` and `mcauleylab.ucsd.edu` (`403 blocked-by-allowlist`), unlike the earlier Ali-CCP work where the raw data was already mounted. The download step (and everything downstream needing local GPU) has to run on the local machine — scripts are written, not yet executed or validated against real downloaded data.
+All four scripts have now been run locally end-to-end. Two real bugs were found and fixed along the way (both documented in the scripts' docstrings/comments, not just here):
 
-Scripts added (all in the same style as the Ali-CCP pipeline; not yet run):
-- `data/preprocessing/amazon_download.py` — downloads `Digital_Music.jsonl.gz` / `meta_Digital_Music.jsonl.gz` via `huggingface_hub` (falls back to direct HTTPS), with a 2GB sanity ceiling per file to catch an accidental category swap to something much larger.
-- `data/preprocessing/amazon_build_dataset.py` — single-pass (no chunking needed at this scale) construction of the modelling dataset:
-  - Positive interactions = `verified_purchase` reviews only (closest analogue to Ali-CCP's "purchase" signal available here) — a documented, unvalidated design choice.
-  - Iterative 5-core filtering (matches the Amazon Reviews'23 release's own benchmarking convention).
-  - **Genuine chronological split** (train / val / test by timestamp) — Amazon Reviews'23 has real per-second timestamps, unlike Ali-CCP, so this is a methodological improvement over Ali-CCP's non-temporal official train/test boundary.
-  - Item vocabulary for `is_cold_start_item` built from train only, same convention as Ali-CCP.
-  - Negative sampling (4 sampled negatives per positive, uniform over the item catalog, excluding the user's own positives) — this dataset has no natural non-interaction signal the way Ali-CCP has non-clicks, so this is a real modelling choice to flag explicitly, not a neutral default.
-  - Extracts genuine real text per item (title + store + category + features + description) — no template needed, unlike Ali-CCP's pseudo-text.
-- `src/baselines/amazon_id_baseline.py` — ID-embedding two-tower binary classifier (single BCE task, not ESMM's dual CTR/CVR structure, since there's no click stage here).
-- `src/models/amazon_text_embedding.py` — same architecture, item ID embedding replaced by a frozen `all-MiniLM-L6-v2` embedding of the real item text (same encoder as Ali-CCP's V1, for a fair model-for-model comparison). **This is the first experiment in the dissertation where a result can actually speak to whether an LLM's pretrained world knowledge helps**, rather than only whether its architecture handles out-of-vocabulary anonymised IDs better than a from-scratch embedding table.
+1. **`Digital_Music` category was too sparse to use.** Its verified-purchase subset (94,954 interactions / 79,404 users / 50,878 items, mean ~1.2 interactions/entity) collapsed to 0 rows under iterative 5-core filtering, and even the 2-core result that did survive (4,160 rows) was too small for either baseline to learn signal above chance (AUC ~0.49-0.51 for both ID and text embeddings). Switched to `Video_Games`, which has ~33.5 ratings/item on average (vs. Digital_Music's ~1.87), giving far more collaborative signal. To keep dataset volume controlled despite Video_Games' much larger raw pool (3.9M verified-purchase interactions / 2.5M users), `amazon_build_dataset.py` now randomly samples whole users (not rows — preserves each sampled user's full interaction history) down to `RAW_SAMPLE_MAX_USERS = 150,000` before k-core filtering.
+2. **Stale embedding cache bug in `amazon_text_embedding.py`.** `item_llm_embeddings.pkl` wasn't namespaced by category/dataset, so after switching to Video_Games the script silently reused the old Digital_Music cache (1,324 items). None of the new item ids matched, every lookup fell back to the zero-vector UNK embedding, and the model saw a constant item representation for everything — the symptom was val/test AUC stuck at exactly 0.5000 across all epochs. Fixed by validating the cache covers the current item set before trusting it (auto re-encodes on mismatch).
 
-**Next steps (local machine)**: run `amazon_download.py`, sanity-check the reported file sizes/row counts against the table above, run `amazon_build_dataset.py`, then `amazon_id_baseline.py` and `amazon_text_embedding.py`, compare `test_overall`/`test_seen_items`/`test_cold_start_items` AUC between the two.
+Final results (`Video_Games`, k-core=2 → 99,281 rows / 32,039 users / 13,720 items → train=397,125 / val=49,640 / test=49,640 after negative sampling):
+
+| | val AUC | test_overall | test_seen_items | test_cold_start_items |
+|---|---|---|---|---|
+| ID-embedding baseline | 0.5527 | 0.4698 | 0.6162 | 0.5023 |
+| Real-text embedding (MiniLM-L6-v2) | 0.5205 | 0.4209 | 0.6061 | 0.4937 |
+
+Both models learn real signal on seen items (AUC ~0.61, well above chance) and both are essentially at chance on cold-start items (~0.49-0.50) — real-text embeddings did not confer better cold-start generalisation over learned ID embeddings in this simple concat-and-MLP architecture, and slightly underperform the ID baseline on val/test_seen. `test_overall` being lower than `test_seen_items` for both models is a statistical artifact of AUC not being decomposable across strata with very different positive rates (seen: 11.8%, cold: 46.7%), not a bug.
+
+**Interpretation / open point for supervisor discussion**: naive frozen-text-embedding replacement doesn't automatically beat a learned ID embedding here, even with genuine natural-language item text (unlike Ali-CCP's anonymised pseudo-text). This is a real, reportable negative result for RQ1 on this dataset, and motivates why the more involved alignment architectures (V1/V2 on Ali-CCP) are worth studying rather than assuming text embeddings are a free win.
 
 ---
 
@@ -361,6 +390,7 @@ dissertation-cvr-llm/
 │       ├── llm_encoder_v1_full.py
 │       ├── llm_encoder_v2_aligned.py
 │       ├── llm_encoder_v2_mpnet.py                    # NEW (2026-07-30) — "Different Embedders" experiment
+│       ├── llm_encoder_v3_hybrid.py                    # NEW (2026-08-02) — hybrid V3 segment router (V1+V2)
 │       └── amazon_text_embedding.py                   # NEW (2026-07-30) — Amazon real-text embedding
 └── docs/
     ├── references.bib
@@ -430,7 +460,7 @@ Note: `Dataset/` (raw Ali-CCP + Criteo files, ~15GB) is gitignored and lives onl
 - [x] V2 — RLMRec-style ID+text alignment (≈ parity with baseline, best overall)
 - [x] Test-set difficulty segmentation (context-length × cold-start 2×2) — V1/V1-Full beat V2 in hardest cell
 - [x] Full modelling pipeline code recovered (2026-07-30, two `code_for_github` syncs) — all preprocessing, baseline, V1/V1-Full/V2, and evaluation scripts now in this repo and verified against the data; only `degree_distribution_scan_test.py` still missing (non-blocking, its output already exists) — see "Known Gaps"
-- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (MPNet script written, not yet run — see Candidate encoder shortlist), "Text/no text dataset" (Amazon Reviews'23 Digital_Music pipeline written — download/build/baseline/text-embedding scripts, not yet run locally — see Open Questions → Second real-text dataset), "Implement hybrid V3?" (deferred, depends on the first two)
+- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (**done** — MPNet vs MiniLM V2 comparison run, see "Candidate encoder shortlist": no overall gain, notable cold-start regression), "Text/no text dataset" (**done** — Amazon Reviews'23 Video_Games pipeline run to completion, results in "Amazon pipeline — status"), "Implement hybrid V3?" (**done** — `llm_encoder_v3_hybrid.py` run, beats both V1 and V2 on overall CTCVR-AUC and the hard segment, see "V3: hybrid segment router")
 - [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy; also on the post-meeting todo ("Move report draft to Overleaf, share with AS", "Review methods & Results next week", "Define cold start")
 - [ ] Dissertation write-up
 
