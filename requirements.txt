@@ -6,3 +6,4 @@ torch
 torch-geometric
 transformers
 sentence-transformers
+huggingface_hub

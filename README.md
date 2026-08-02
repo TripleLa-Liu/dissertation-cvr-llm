@@ -299,7 +299,27 @@ Compared Amazon Reviews'23 and MIND as candidates to isolate RQ1 (text vs. ID em
 | Prior use in this dissertation's lit review | Yes — UniSRec and RLMRec (both core citations) both benchmark on Amazon category subsets | Not currently cited |
 | Adaptation cost | Moderate: need negative sampling to turn implicit positives into a binary task (standard practice, well precedented) | Moderate-high: CTR side maps directly, but CVR side has no analog — would need a proxy conversion definition, undermining the "real conversion" purpose of using a second dataset at all |
 
-**Recommendation: Amazon Reviews'23, a single small category (e.g. Beauty or Video_Games, 5-core filtered).** Neither dataset has Ali-CCP's native two-stage click→purchase funnel, so this experiment is necessarily reframed as testing RQ1's general claim (text embeddings beat ID embeddings, especially for sparse/cold-start entities) via a binary interaction-prediction task with sampled negatives, rather than a literal CVR replication — that reframing should be stated explicitly wherever this is written up. Amazon Reviews wins on domain match, adaptation cost, and direct precedent in already-cited work (UniSRec/RLMRec); MIND's lack of any conversion-stage analog is the harder problem to justify away. Not yet built — pending confirmation of this recommendation and the specific category before writing the download/preprocessing pipeline.
+**Recommendation: Amazon Reviews'23, a single small category, 5-core filtered.** Neither dataset has Ali-CCP's native two-stage click→purchase funnel, so this experiment is necessarily reframed as testing RQ1's general claim (text embeddings beat ID embeddings, especially for sparse/cold-start entities) via a binary interaction-prediction task with sampled negatives, rather than a literal CVR replication — that reframing is stated explicitly in every new script's docstring. Amazon Reviews wins on domain match, adaptation cost, and direct precedent in already-cited work (UniSRec/RLMRec); MIND's lack of any conversion-stage analog is the harder problem to justify away.
+
+**Category chosen: `Digital_Music`** (101.0K users, 70.5K items, 130.4K ratings per the official per-category table) — picked specifically to keep the download small (explicit volume constraint): the compressed review+meta files are expected in the tens-to-low-hundreds of MB range, vs. multi-GB for larger categories like Beauty_and_Personal_Care or Electronics.
+
+### Amazon pipeline — status (2026-07-30)
+
+**Sandbox network constraint discovered**: this Cowork sandbox's network is allowlisted and blocks both `huggingface.co` and `mcauleylab.ucsd.edu` (`403 blocked-by-allowlist`), unlike the earlier Ali-CCP work where the raw data was already mounted. The download step (and everything downstream needing local GPU) has to run on the local machine — scripts are written, not yet executed or validated against real downloaded data.
+
+Scripts added (all in the same style as the Ali-CCP pipeline; not yet run):
+- `data/preprocessing/amazon_download.py` — downloads `Digital_Music.jsonl.gz` / `meta_Digital_Music.jsonl.gz` via `huggingface_hub` (falls back to direct HTTPS), with a 2GB sanity ceiling per file to catch an accidental category swap to something much larger.
+- `data/preprocessing/amazon_build_dataset.py` — single-pass (no chunking needed at this scale) construction of the modelling dataset:
+  - Positive interactions = `verified_purchase` reviews only (closest analogue to Ali-CCP's "purchase" signal available here) — a documented, unvalidated design choice.
+  - Iterative 5-core filtering (matches the Amazon Reviews'23 release's own benchmarking convention).
+  - **Genuine chronological split** (train / val / test by timestamp) — Amazon Reviews'23 has real per-second timestamps, unlike Ali-CCP, so this is a methodological improvement over Ali-CCP's non-temporal official train/test boundary.
+  - Item vocabulary for `is_cold_start_item` built from train only, same convention as Ali-CCP.
+  - Negative sampling (4 sampled negatives per positive, uniform over the item catalog, excluding the user's own positives) — this dataset has no natural non-interaction signal the way Ali-CCP has non-clicks, so this is a real modelling choice to flag explicitly, not a neutral default.
+  - Extracts genuine real text per item (title + store + category + features + description) — no template needed, unlike Ali-CCP's pseudo-text.
+- `src/baselines/amazon_id_baseline.py` — ID-embedding two-tower binary classifier (single BCE task, not ESMM's dual CTR/CVR structure, since there's no click stage here).
+- `src/models/amazon_text_embedding.py` — same architecture, item ID embedding replaced by a frozen `all-MiniLM-L6-v2` embedding of the real item text (same encoder as Ali-CCP's V1, for a fair model-for-model comparison). **This is the first experiment in the dissertation where a result can actually speak to whether an LLM's pretrained world knowledge helps**, rather than only whether its architecture handles out-of-vocabulary anonymised IDs better than a from-scratch embedding table.
+
+**Next steps (local machine)**: run `amazon_download.py`, sanity-check the reported file sizes/row counts against the table above, run `amazon_build_dataset.py`, then `amazon_id_baseline.py` and `amazon_text_embedding.py`, compare `test_overall`/`test_seen_items`/`test_cold_start_items` AUC between the two.
 
 ---
 
@@ -320,16 +340,20 @@ dissertation-cvr-llm/
 │   ├── extract_user_pseudo_text.py
 │   ├── profile_raw_fields.py
 │   ├── build_test_difficulty_segments.py
-│   └── degree_distribution_scan_test.py              # STILL MISSING
+│   ├── degree_distribution_scan_test.py              # STILL MISSING
+│   ├── amazon_download.py                            # NEW (2026-07-30) — "Text/no text dataset" experiment
+│   └── amazon_build_dataset.py                        # NEW (2026-07-30)
 ├── src/
 │   ├── eval_context_segments.py
 │   ├── baselines/
-│   │   └── id_embedding_baseline.py                  # ESMM baseline
+│   │   ├── id_embedding_baseline.py                  # ESMM baseline (Ali-CCP)
+│   │   └── amazon_id_baseline.py                      # NEW (2026-07-30) — Amazon ID baseline
 │   └── models/
 │       ├── llm_encoder_v1.py
 │       ├── llm_encoder_v1_full.py
 │       ├── llm_encoder_v2_aligned.py
-│       └── llm_encoder_v2_mpnet.py                    # NEW (2026-07-30) — "Different Embedders" experiment
+│       ├── llm_encoder_v2_mpnet.py                    # NEW (2026-07-30) — "Different Embedders" experiment
+│       └── amazon_text_embedding.py                   # NEW (2026-07-30) — Amazon real-text embedding
 └── docs/
     ├── references.bib
     └── methods_results_draft.tex
@@ -398,7 +422,7 @@ Note: `Dataset/` (raw Ali-CCP + Criteo files, ~15GB) is gitignored and lives onl
 - [x] V2 — RLMRec-style ID+text alignment (≈ parity with baseline, best overall)
 - [x] Test-set difficulty segmentation (context-length × cold-start 2×2) — V1/V1-Full beat V2 in hardest cell
 - [x] Full modelling pipeline code recovered (2026-07-30, two `code_for_github` syncs) — all preprocessing, baseline, V1/V1-Full/V2, and evaluation scripts now in this repo and verified against the data; only `degree_distribution_scan_test.py` still missing (non-blocking, its output already exists) — see "Known Gaps"
-- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (MPNet script written, not yet run — see Candidate encoder shortlist), "Text/no text dataset" (second real-text dataset — see Open Questions), "Implement hybrid V3?" (deferred, depends on the first two)
+- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (MPNet script written, not yet run — see Candidate encoder shortlist), "Text/no text dataset" (Amazon Reviews'23 Digital_Music pipeline written — download/build/baseline/text-embedding scripts, not yet run locally — see Open Questions → Second real-text dataset), "Implement hybrid V3?" (deferred, depends on the first two)
 - [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy; also on the post-meeting todo ("Move report draft to Overleaf, share with AS", "Review methods & Results next week", "Define cold start")
 - [ ] Dissertation write-up
 
