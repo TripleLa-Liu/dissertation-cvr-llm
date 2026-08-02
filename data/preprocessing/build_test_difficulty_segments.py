@@ -43,7 +43,7 @@ import pickle
 import shutil
 import statistics
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 COUNTERS_PATH = os.path.join(WORK_DIR, "aliccp_degree_counters_test.pkl")
 TEST_PATH = os.path.join(WORK_DIR, "aliccp_test_filtered_joined.csv")
 OUTPUT_PATH = os.path.join(WORK_DIR, "aliccp_test_with_segments.csv")

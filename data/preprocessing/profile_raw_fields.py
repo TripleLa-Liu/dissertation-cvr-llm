@@ -34,8 +34,8 @@ import random
 import time
 from collections import defaultdict
 
-SKELETON_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
-COMMON_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\common_features_train.csv"
+SKELETON_PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
+COMMON_PATH = r"D:\Study\Datasets\sample_train\common_features_train.csv"
 
 SAMPLE_SIZE = 100_000
 MAX_DISTINCT_TRACKED = 200   # cap per-field distinct-value tracking (memory)

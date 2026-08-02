@@ -53,8 +53,8 @@ plt.rcParams["font.size"] = 11
 # ------------------------------------------------------------------
 # CONFIG — edit these two paths to point at your extracted files
 # ------------------------------------------------------------------
-SKELETON_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
-COMMON_PATH   = r"E:\BaiduNetdiskDownload\Dataset\sample_train\common_features_train.csv"
+SKELETON_PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
+COMMON_PATH   = r"D:\Study\Datasets\sample_train\common_features_train.csv"
 
 # Reference (measured on this dissertation's data, via a 2GB byte-sampled
 # linecount extrapolation): sample_skeleton_train.csv ~41M rows,

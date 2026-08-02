@@ -31,7 +31,7 @@ import random
 # Same WORK_DIR as degree_distribution_scan.py / filter_and_join.py /
 # degree_distribution_scan_test.py / filter_test_and_join.py — keep fixed
 # across all preprocessing scripts so nothing gets lost.
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 os.makedirs(WORK_DIR, exist_ok=True)
 
 INPUT_PATH = os.path.join(WORK_DIR, "aliccp_filtered_joined.csv")

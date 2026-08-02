@@ -36,7 +36,7 @@ import urllib.request
 
 CATEGORY = "Digital_Music"
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 AMAZON_DIR = os.path.join(WORK_DIR, "amazon")
 RAW_DIR = os.path.join(AMAZON_DIR, "raw")
 os.makedirs(RAW_DIR, exist_ok=True)

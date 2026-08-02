@@ -40,7 +40,7 @@ except ImportError:
 # ------------------------------------------------------------------
 # CONFIG
 # ------------------------------------------------------------------
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 PROCESSED_DIR = os.path.join(WORK_DIR, "amazon", "processed")
 RESULTS_DIR = os.path.join(WORK_DIR, "amazon", "baseline_results")
 os.makedirs(RESULTS_DIR, exist_ok=True)

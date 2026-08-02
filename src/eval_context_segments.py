@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.metrics import roc_auc_score
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 TRAIN_PATH = os.path.join(WORK_DIR, "aliccp_train_split.csv")
 SEGMENTED_TEST_PATH = os.path.join(WORK_DIR, "aliccp_test_with_segments.csv")
 

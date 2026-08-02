@@ -38,13 +38,13 @@ import os
 import pickle
 import time
 
-SKELETON_TEST_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_test\sample_skeleton_test.csv"
-COMMON_TEST_PATH   = r"E:\BaiduNetdiskDownload\Dataset\sample_test\common_features_test.csv"
+SKELETON_TEST_PATH = r"D:\Study\Datasets\sample_test\sample_skeleton_test.csv"
+COMMON_TEST_PATH   = r"D:\Study\Datasets\sample_test\common_features_test.csv"
 
 # Same WORK_DIR as the other three preprocessing scripts — keep it fixed so
 # every input/output file (train's joined csv, both pkls, test's outputs)
 # lives in one place and nothing gets lost again.
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 os.makedirs(WORK_DIR, exist_ok=True)
 
 TRAIN_JOINED_PATH = os.path.join(WORK_DIR, "aliccp_filtered_joined.csv")  # to build the item whitelist

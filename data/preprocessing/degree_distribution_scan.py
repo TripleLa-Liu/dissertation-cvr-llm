@@ -27,7 +27,7 @@ from collections import Counter
 # ------------------------------------------------------------------
 # CONFIG — edit this path
 # ------------------------------------------------------------------
-SKELETON_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
+SKELETON_PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
 PROGRESS_EVERY = 5_000_000
 OUTPUT_PICKLE = "aliccp_degree_counters.pkl"
 

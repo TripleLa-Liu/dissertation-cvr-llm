@@ -50,8 +50,8 @@ except ImportError:
 # ------------------------------------------------------------------
 # CONFIG
 # ------------------------------------------------------------------
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
-RESULTS_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed\v1_full_results"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
+RESULTS_DIR = r"D:\Study\migration_package\processed_data\v1_full_results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 TRAIN_PATH = os.path.join(WORK_DIR, "aliccp_train_split.csv")

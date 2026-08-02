@@ -29,8 +29,8 @@ import csv
 import pickle
 import time
 
-SKELETON_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
-COMMON_PATH   = r"E:\BaiduNetdiskDownload\Dataset\sample_train\common_features_train.csv"
+SKELETON_PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
+COMMON_PATH   = r"D:\Study\Datasets\sample_train\common_features_train.csv"
 COUNTERS_PICKLE = "aliccp_degree_counters.pkl"
 FILTERED_OUTPUT = "aliccp_filtered_skeleton.csv"
 JOINED_OUTPUT = "aliccp_filtered_joined.csv"

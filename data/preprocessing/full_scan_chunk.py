@@ -9,8 +9,8 @@ distributional stats (item sparsity, feature_num, common_feature_index reuse).
 """
 import json, os, pickle, random, time
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
-PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
+PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
 STATE_PATH = os.path.join(WORK_DIR, "scan_state.json")
 RESERVOIR_PATH = os.path.join(WORK_DIR, "scan_reservoir.pkl")
 RESERVOIR_SIZE = 50_000

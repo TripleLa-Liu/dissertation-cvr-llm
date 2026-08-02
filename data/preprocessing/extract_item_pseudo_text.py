@@ -29,13 +29,13 @@ import csv
 import os
 import time
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 TRAIN_SPLIT_PATH = os.path.join(WORK_DIR, "aliccp_train_split.csv")
 VAL_SPLIT_PATH = os.path.join(WORK_DIR, "aliccp_val_split.csv")
 TEST_PATH = os.path.join(WORK_DIR, "aliccp_test_filtered_joined.csv")
 
-SKELETON_TRAIN_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_train\sample_skeleton_train.csv"
-SKELETON_TEST_PATH = r"E:\BaiduNetdiskDownload\Dataset\sample_test\sample_skeleton_test.csv"
+SKELETON_TRAIN_PATH = r"D:\Study\Datasets\sample_train\sample_skeleton_train.csv"
+SKELETON_TEST_PATH = r"D:\Study\Datasets\sample_test\sample_skeleton_test.csv"
 
 OUTPUT_PATH = os.path.join(WORK_DIR, "item_pseudo_text.csv")
 

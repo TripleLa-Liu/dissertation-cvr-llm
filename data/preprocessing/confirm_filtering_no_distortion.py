@@ -37,7 +37,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"
+WORK_DIR = r"D:\Study\migration_package\processed_data"
 COUNTERS_PATH = os.path.join(WORK_DIR, "aliccp_degree_counters.pkl")
 FILTERED_PATH = os.path.join(WORK_DIR, "aliccp_filtered_joined.csv")
 RESERVOIR_PATH = os.path.join(WORK_DIR, "scan_reservoir.pkl")   # see note below if missing

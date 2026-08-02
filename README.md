@@ -270,6 +270,14 @@ Checked whether anything would actually block a GitHub push or a from-scratch ex
 - `degree_distribution_scan_test.py` — the one missing script (see above); doesn't block anything currently in the repo since its sole output (`aliccp_degree_counters_test.pkl`) already exists as data, but a fully from-scratch clone-and-run (no migrated data) can't regenerate it without this file.
 - `data/README.md` (Ali-CCP/Criteo download instructions) — still `[planned]`, never written.
 
+### WORK_DIR path fix (2026-07-30, after first local run attempt)
+
+Every script (all 21 that reference a data path) had `WORK_DIR = r"E:\BaiduNetdiskDownload\Dataset\_processed"` hardcoded — this was the *old* computer's path, and `MIGRATION_NOTES.md` already flagged that it would need updating if the drive letter/path differed on the new machine. First local run of `amazon_download.py` confirmed it does: `E:\` doesn't exist on this machine. Updated across all scripts:
+- `WORK_DIR` (processed data / script outputs): `E:\BaiduNetdiskDownload\Dataset\_processed` → `D:\Study\migration_package\processed_data` (this is where the migrated data already lives — no copying needed).
+- Raw Ali-CCP paths (`SKELETON_PATH`/`COMMON_PATH`/etc. in `aliccp_eda_raw.py`, `degree_distribution_scan.py`, `filter_and_join.py`, `filter_test_and_join.py`, `extract_item_pseudo_text.py`, `extract_user_pseudo_text.py`, `profile_raw_fields.py`, `full_scan_chunk.py`): `E:\BaiduNetdiskDownload\Dataset\sample_train\...` / `sample_test\...` → `D:\Study\Datasets\sample_train\...` / `sample_test\...` (where the raw files are actually mounted).
+
+All 21 files re-verified for valid Python syntax after the change.
+
 ### Folder cleanup + git repair (2026-07-30, same pass)
 
 - Deleted 9.2GB of redundant raw-data backups (`Dataset/6.29/sample_train.tar.gz` + `sample_test.tar.gz` + `.md5` files) — same Ali-CCP data already exists extracted and integrity-checked in the separate `Datasets/` folder; not git-tracked, not read by any script.
