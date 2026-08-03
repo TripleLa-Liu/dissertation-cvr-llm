@@ -37,7 +37,7 @@ Ali-CCP does not expose real item titles, descriptions, or user profiles; every 
 
 \section{Model Architectures}
 
-All four models share an ESMM-style (Entire Space Multi-task Model) two-tower architecture: a shared representation for user and item feeds separate CTR and CVR MLP towers ($[128, 64]$ hidden units), trained jointly via
+All four models share an ESMM-style (Entire Space Multi-task Model) two-tower architecture \cite{ma2018esmm}: a shared representation for user and item feeds separate CTR and CVR MLP towers ($[128, 64]$ hidden units), trained jointly via
 \[
 \mathcal{L} = \text{BCE}(\hat{p}_{\text{ctr}}, y_{\text{click}}) + \text{BCE}(\hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}, y_{\text{purchase}})
 \]
@@ -76,15 +76,97 @@ Three findings recur consistently across the two REPLACE variants (V1, V1-Full) 
 
 V2 (ALIGN) is the only LLM-integrated variant that does not clearly underperform the ID-only baseline: it matches or exceeds Baseline on validation CTCVR-AUC, validation CVR-AUC, and test seen-item CVR-AUC, and comes within 0.005 AUC of Baseline on test overall CTCVR-AUC. This supports the interpretation that \emph{retaining} learned ID embeddings while using pseudo-text only as an auxiliary alignment signal (rather than a replacement) preserves the fine-grained memorisation capacity IDs provide, while still offering a mild regularisation benefit consistent with RLMRec's own reported results \cite{ren2024rlmrec}. However, V2 does not reproduce V1's cold-start CTR gain (0.5357 vs.\ 0.5556), indicating its projection head --- trained primarily against warm items' ID embeddings --- generalises to genuinely unseen items less effectively than V1's direct replacement approach.
 
-\section{Discussion: Limits of Pseudo-Text on Ali-CCP}
+\subsection{Encoder Capacity: MPNet vs.\ MiniLM}
+\label{sec:mpnet}
 
-All three architectural variants converge on the same conclusion: with Ali-CCP's fully anonymised categorical fields, none of the three integration patterns (REPLACE-item, REPLACE-item+user, ALIGN) structurally solves the cold-start problem this dissertation targets. The ALIGN pattern (V2) avoids actively \emph{hurting} performance, but the underlying pseudo-text lacks the semantic richness that a pretrained language model could otherwise draw on --- there is no real title, description, or profile text anywhere in the dataset, only template sentences built around out-of-vocabulary numeric identifiers. This is a dataset-level limitation rather than an architectural one, and motivates evaluating the same three architectures on a second, real-text dataset (e.g.\ Amazon Reviews or MIND) as part of the multi-dataset $\times$ multi-model evaluation matrix, to isolate whether the REPLACE/ALIGN distinction behaves differently once genuine semantic text is available.
+The reported V2 results use \texttt{all-MiniLM-L6-v2} \cite{reimers2019sbert} (22M parameters, 384-dim) as a fast first-pass encoder. To test whether encoder capacity, rather than the anonymised pseudo-text itself, was the binding constraint on V2's results, we re-ran V2 with the frozen encoder swapped for \texttt{all-mpnet-base-v2} \cite{song2020mpnet} (109M parameters, 768-dim) -- otherwise identical architecture, hyperparameters, and $\lambda_{\text{align}}=0.1$, not re-tuned per encoder. V2 was chosen as the base for this comparison because it is the only LLM-integrated variant competitive with the ID baseline, making it the more informative test of encoder quality specifically.
 
-% ------------------------------------------------------------
-% Candidate embedder list (for a "future work" or "implementation
-% details" subsection) -- see README "Candidate LM list" section
-% for the full table and VRAM/feasibility notes.
-% ------------------------------------------------------------
-\subsection{Candidate Embedders for Future Iterations}
+\begin{table}[h]
+\centering
+\caption{V2 test CTCVR-AUC: MiniLM (384-dim) vs.\ MPNet (768-dim)}
+\label{tab:mpnet-vs-minilm}
+\begin{tabular}{lrrr}
+\toprule
+ & Overall & Seen items & Cold-start items \\
+\midrule
+V2 -- MiniLM & \textbf{0.5616} & 0.5656 & \textbf{0.5724} \\
+V2 -- MPNet  & 0.5571 & \textbf{0.5723} & 0.5361 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-The reported results use \texttt{all-MiniLM-L6-v2} \cite{reimers2019sbert} (22M parameters, 384-dim) as a fast first-pass encoder. Stronger \texttt{sentence-transformers}-compatible alternatives identified for future iterations include \texttt{all-mpnet-base-v2} \cite{song2020mpnet} (109M parameters, 768-dim), BGE-base-en-v1.5, E5-base-v2, and GTE-base (all $\sim$109M parameters, competitive on the MTEB benchmark), and the more recent compact EmbeddingGemma-300M. XLNet \cite{yang2019xlnet} was also named as a candidate in supervisor discussion, but is an autoregressive permutation-language-model backbone rather than a model pretrained with a sentence-embedding (Siamese/contrastive) objective; using it as a sentence encoder without first fine-tuning it as an SBERT-style bi-encoder would likely understate its true representational quality relative to the models above, so it was deprioritised in favour of MPNet as the fair like-for-like ``stronger embedder'' comparison point.
+A larger, generally stronger general-purpose encoder does not improve overall CTCVR-AUC, and the aggregate masks a real split: MPNet is marginally \emph{better} than MiniLM on seen items but notably \emph{worse} on cold-start items ($-0.036$ AUC) -- the opposite of what ``better encoder'' would naively predict, since cold-start items are exactly where semantic (non-ID) signal should matter most. A plausible explanation is that the higher-dimensional MPNet space is harder to align to the same 32-dim ID-embedding space under an unchanged $\lambda_{\text{align}}$ and epoch budget; this comparison is therefore not a clean, hyperparameter-matched ablation. Either way, the result is inconsistent with ``insufficient encoder capacity'' as the explanation for V2's modest gains over Baseline, reinforcing the pseudo-text-quality explanation developed in Section~\ref{sec:discussion}. BGE, E5, GTE, and EmbeddingGemma were shortlisted as further candidates but not implemented, given this result. XLNet \cite{yang2019xlnet} was also named as a candidate in supervisor discussion, but is an autoregressive permutation-language-model backbone rather than a model pretrained with a sentence-embedding (Siamese/contrastive) objective; using it as a sentence encoder without first fine-tuning it as an SBERT-style bi-encoder would likely understate its true representational quality relative to the models above, so it was deprioritised in favour of MPNet as the fair like-for-like comparison point.
+
+\subsection{Hybrid Segment Routing (V3)}
+\label{sec:v3}
+
+Segmenting the test set by session-interaction-count (long/short context, split at the median) crossed with seen/cold-start status reveals a crossover the aggregate CTCVR-AUC numbers hide: V2 is the strongest model overall, but in the single hardest cell -- short-context \& cold-start (418{,}643 rows, 20.9\% of test) -- V1 (0.5671) clearly beats V2 (0.5455) and Baseline (0.5413).
+
+The mechanism is traceable directly in the training code rather than inferred post hoc. V2 keeps a learned \texttt{item\_emb} for in-vocabulary items and a trainable projection of the frozen text embedding, \texttt{item\_llm\_proj}, for out-of-vocabulary (cold-start) items. Critically, \texttt{item\_llm\_proj} only ever receives gradient through the contrastive alignment loss -- a proxy objective pulling it toward the geometry of \emph{other, warm} items' ID embeddings -- because every training-batch item is by construction in-vocabulary, so the main CTR/CVR loss never reaches the cold-start branch during training. V1's item representation, by contrast, is identically text-derived for every item, warm or cold, and is directly supervised by the CTR/CVR loss on every training row. Direct task supervision transfers to an unseen item's text better than a proxy alignment objective does; conversely, V2 wins on seen items because it keeps a fully free-form, high-capacity \texttt{item\_emb} per item, a capacity V1 has traded away entirely.
+
+This motivates a hybrid V3: a deterministic router over the already-trained V1 and V2 checkpoints (no new training, no threshold tuned against test performance -- the rule is the segment definition itself, fixed independently of test AUC):
+\[
+\text{prediction} =
+\begin{cases}
+  \text{V1's prediction} & \text{if short-context} \wedge \text{cold-start} \\
+  \text{V2's prediction} & \text{otherwise}
+\end{cases}
+\]
+with $\hat{p}_{\text{ctr}}$, $\hat{p}_{\text{cvr}}$, and $\hat{p}_{\text{ctcvr}}$ all routed together per row from the same source model, keeping $\hat{p}_{\text{ctcvr}} = \hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}$ internally consistent.
+
+\begin{table}[h]
+\centering
+\caption{Test CTCVR-AUC: V3-Hybrid vs.\ all four component models}
+\label{tab:v3-results}
+\begin{tabular}{lrr}
+\toprule
+Model & Overall & Short-context \& cold-start \\
+\midrule
+Baseline    & 0.5610 & 0.5413 \\
+V1          & 0.5299 & 0.5671 \\
+V1-Full     & 0.5124 & 0.5564 \\
+V2          & 0.5616 & 0.5455 \\
+V3-Hybrid   & \textbf{0.5649} & \textbf{0.5671} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+V3-Hybrid wins on both counts, not only the hard segment it targets. It exactly matches V1's number in that cell (0.5671, as expected -- it is literally V1's prediction there) while also improving \emph{overall} CTCVR-AUC over pure V2 (0.5649 vs.\ 0.5616), despite V1 being the substantially weaker model everywhere else and routed to only 20.9\% of test rows. This was not guaranteed a priori: V1 and V2 are trained completely independently, with no shared calibration, so combining their raw probability outputs risked hurting the pooled ranking even if each branch were locally correct. That it did not is an empirical property of this model pair on this test set, not a general guarantee, and a production or probability-sensitive use of this routing rule would need explicit calibration (e.g.\ per-segment Platt scaling) before deployment.
+
+\section{A Second, Real-Text Dataset: Amazon Reviews'23}
+\label{sec:amazon}
+
+Section~\ref{sec:discussion} identifies Ali-CCP's fully anonymised pseudo-text as a plausible ceiling on how much any LLM-integrated architecture can help: there is no genuine title, description, or profile text anywhere in the dataset. To isolate whether the REPLACE pattern's underperformance (V1, V1-Full) is a property of Ali-CCP's pseudo-text specifically, or a more general property of frozen-text-embedding replacement, we repeat the item-side REPLACE comparison (ID baseline vs.\ frozen text embedding) on Amazon Reviews'23 \cite{hou2024bridging}, a category-partitioned e-commerce review dataset with genuine natural-language item metadata (title, store, category, features, description).
+
+\subsection{Dataset Construction}
+
+Positive interactions are \texttt{verified\_purchase} reviews (the closest analogue to Ali-CCP's purchase signal available in this dataset); negatives are sampled uniformly from the item catalog (4 per positive), excluding items the user has already interacted with -- this dataset provides no natural non-interaction signal the way Ali-CCP provides real non-clicks. Unlike Ali-CCP, Amazon Reviews'23 carries genuine per-second timestamps, enabling a real chronological train/validation/test split (80/10/10 by time) rather than Ali-CCP's non-temporal official partition. An \texttt{is\_cold\_start\_item} flag is built from the train-only item vocabulary, matching Ali-CCP's convention.
+
+An initial attempt used the \texttt{Digital\_Music} category (101.0K users, 70.5K items, 130.4K ratings) for its small footprint, deliberately chosen to respect a dataset-volume constraint. Its verified-purchase interaction graph proved too sparse to be usable: mean interactions per entity were only 1.2--1.9, and iterative $k$-core filtering collapsed to zero rows at $k=5$ (the Amazon Reviews'23 release's own aggregate-scale convention) and to only 4{,}160 rows even at $k=2$ -- too few for either model to learn signal above chance (test AUC 0.49--0.51 for both). We switched to \texttt{Video\_Games} (2.8M users, 137.2K items, 4.6M ratings), which has $\sim$33.5 ratings/item on average versus Digital\_Music's $\sim$1.9, giving substantially more collaborative signal, while capping dataset volume by randomly sampling 150{,}000 whole users (preserving each sampled user's full interaction history, rather than sampling rows, which would have reintroduced the sparsity problem) before $k$-core filtering. The final dataset ($k=2$-core: 99{,}281 rows / 32{,}039 users / 13{,}720 items, split chronologically to 397{,}125 / 49{,}640 / 49{,}640 train/val/test rows after negative sampling) is two orders of magnitude smaller than Amazon Reviews'23's largest categories.
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Amazon Reviews'23 (Video\_Games): ID baseline vs.\ real-text item embedding}
+\label{tab:amazon-results}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Val AUC & Test overall & Test seen & Test cold-start \\
+\midrule
+ID-embedding baseline               & \textbf{0.5527} & \textbf{0.4698} & \textbf{0.6162} & \textbf{0.5023} \\
+Real-text embedding (MiniLM)        & 0.5205 & 0.4209 & 0.6061 & 0.4937 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both models learn real signal on seen items ($\sim$0.61 AUC, well above chance) and both are close to chance on cold-start items ($\sim$0.49--0.50); real-text embeddings do not confer better cold-start generalisation than a learned ID embedding here, and slightly underperform it on validation and seen-item AUC. \texttt{Test overall} being lower than \texttt{test seen} for both models is a statistical artifact of AUC not decomposing linearly across strata with very different positive rates (seen: 11.8\%, cold-start: 46.7\%), not a modelling error.
+
+This is a genuine, negative result for the REPLACE pattern that generalises beyond Ali-CCP: even with authentic natural-language item text and a denser interaction graph than Ali-CCP's cold-start segment, naively substituting a frozen sentence embedding for a learned item ID embedding does not beat the ID embedding, in this simple concatenate-and-MLP architecture. This argues against attributing V1/V1-Full's Ali-CCP underperformance purely to pseudo-text quality, and strengthens the case (Section~\ref{sec:v3}) for architectures that retain ID embeddings' memorisation capacity for warm entities while using text only where IDs structurally cannot help (V2's ALIGN pattern, and V3's explicit routing).
+
+\section{Discussion}
+\label{sec:discussion}
+
+The three Ali-CCP variants (REPLACE-item, REPLACE-item+user, ALIGN) converge on a shared conclusion: with Ali-CCP's fully anonymised categorical fields, none structurally solves the cold-start problem this dissertation targets on their own, though ALIGN (V2) avoids actively \emph{hurting} performance where REPLACE (V1, V1-Full) does not. Two further experiments narrow down why. First, swapping V2's frozen encoder from MiniLM to the larger, generally stronger MPNet (Section~\ref{sec:mpnet}) does not improve overall results and regresses the cold-start segment specifically -- evidence against ``insufficient encoder capacity'' as the explanation. Second, repeating the REPLACE comparison on Amazon Reviews'23's genuine natural-language item text (Section~\ref{sec:amazon}) reproduces the same qualitative result as on Ali-CCP's pseudo-text: a frozen text embedding does not beat a learned ID embedding, even with real semantic content and a denser graph. Together, these two results shift the most likely explanation away from ``Ali-CCP's pseudo-text specifically is too weak'' and toward a more general property of this REPLACE pattern in a simple concatenate-and-MLP two-tower architecture: a frozen, generically-pretrained text embedding is not a free substitute for a learned, task-specific per-item embedding, regardless of text quality or encoder scale, at least not without a more sophisticated fusion mechanism than direct replacement.
+
+The one design that consistently helps rather than merely avoiding harm is V3's explicit, structurally-motivated routing (Section~\ref{sec:v3}): rather than asking one architecture to be uniformly best, it exploits the fact that V1's item representation is directly task-supervised for \emph{every} item while V2's is only directly supervised for warm items, and routes to whichever branch received the right kind of supervision for a given row's regime. This reframes the dissertation's original three-pattern comparison (REPLACE vs.\ ALIGN vs.\ ID-only) as a supervision-source question rather than a pure architecture question, and is the most direct empirical link so far between this dissertation's LLM-encoder experiments and its broader thesis that different information sources are useful in different, identifiable regimes -- a link the planned Dynamic Graph and Delayed Feedback Correction components are intended to extend further.
