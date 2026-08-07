@@ -268,6 +268,58 @@ This directly answers the meeting question ("Should this motivate a hybrid V3?")
 
 **Caveat — calibration, not correctness.** V1 and V2 are trained completely independently (different loss surfaces, different sigmoid calibration), so there's no guarantee in general that swapping in one model's raw probability output for a subset of rows preserves a sane global ranking — it happened to help here (overall AUC went up, not just the target segment), but that's an empirical result for this pair of models, not a property that would necessarily hold for any two models being routed this way. If V3-style routing were ever used for something other than rank-only AUC evaluation (e.g. actual probability outputs), the two branches' outputs would need calibrating onto a shared scale first (e.g. per-segment Platt scaling), which this script does not do.
 
+### Multi-seed reruns, MPNet completion, Amazon V2/V3, and significance testing (2026-08-04/05 post-meeting round)
+
+Third post-meeting todo item ("list model variant × embedder × dataset performance together, more robust, more metrics like std and t-test"), scoped as "LLM side" work only — Dynamic Graph implementation and Delayed Feedback Correction were explicitly deferred to a later round.
+
+**Infrastructure added:**
+- `--seed` CLI arg added to all 10 training scripts (`id_embedding_baseline.py`, `llm_encoder_v1.py`, `llm_encoder_v1_full.py`, `llm_encoder_v2_aligned.py`, `llm_encoder_v1_mpnet.py` **(new)**, `llm_encoder_v1_full_mpnet.py` **(new)**, `llm_encoder_v2_mpnet.py`, `amazon_id_baseline.py`, `amazon_text_embedding.py`, `amazon_v2_aligned.py` **(new)**). Default seed (42) keeps the original unsuffixed checkpoint/metrics filenames so downstream scripts with hardcoded paths (`llm_encoder_v3_hybrid.py`, `amazon_v3_hybrid.py`) keep working unchanged; any other seed writes to `..._seed{N}` files.
+- `src/aggregate_multiseed_results.py` **(new)** — reads all seed-suffixed metrics files for one model, reports mean ± std per metric.
+- `src/significance_tests.py` **(new)** — paired t-test (`scipy.stats.ttest_rel`) between two models across shared seeds; chose *paired-across-seed* rather than literal k-fold cross-validation because Ali-CCP/Amazon's `is_cold_start_item` flag depends on a fixed train/test item split — re-partitioning the data k different ways (true k-fold CV) would make an item cold-start in one fold and warm in another, destroying the segment definition the whole experiment is built around. Reruns under 5 different seeds (42, 123, 2026, 7, 99) instead hold the split fixed and only vary training-process randomness, which is the appropriate source of variance to test here.
+- `amazon_v2_aligned.py` **(new)** — RLMRec-style ID+alignment (V2 pattern), Amazon counterpart to `llm_encoder_v2_aligned.py`, completing the baseline/V1/V2 set on both datasets.
+- `amazon_v3_hybrid.py` **(new)** — hybrid segment router, Amazon counterpart to `llm_encoder_v3_hybrid.py`.
+- `amazon_build_difficulty_segments.py` **(new)** — Amazon counterpart to `build_test_difficulty_segments.py`; segments by train+val+test combined interaction count (median=15) rather than train-only count, which degenerates to median=0 given Amazon's chronological split (59.7% of test users have zero train rows).
+- All 10 scripts run to completion locally, 5 seeds each (Amazon segmentation + both V3-hybrid routers run once each, seed=42 checkpoints only — pure inference, no training randomness to average over).
+
+**Full comparison matrix, mean ± std across 5 seeds (CTCVR-AUC for Ali-CCP, AUC for Amazon):**
+
+| Ali-CCP model | Test Overall | Test Seen | Test Cold-Start |
+|---|---|---|---|
+| Baseline (ID) | 0.5562 ± 0.0048 | 0.5572 ± 0.0105 | 0.5573 ± 0.0030 |
+| V1 (MiniLM) | 0.5576 ± 0.0248 | 0.5655 ± 0.0372 | 0.5462 ± 0.0127 |
+| V1 (MPNet) | 0.5462 ± 0.0133 | 0.5427 ± 0.0188 | 0.5499 ± 0.0126 |
+| V1-Full (MiniLM) | 0.5121 ± 0.0011 | 0.4908 ± 0.0019 | 0.5421 ± 0.0031 |
+| V1-Full (MPNet) | 0.5111 ± 0.0093 | 0.5051 ± 0.0033 | 0.5187 ± 0.0243 |
+| V2 (MiniLM) | 0.5574 ± 0.0050 | 0.5566 ± 0.0052 | 0.5639 ± 0.0089 |
+| V2 (MPNet) | 0.5576 ± 0.0134 | 0.5646 ± 0.0109 | 0.5492 ± 0.0247 |
+
+| Amazon model | Test Overall* | Test Seen | Test Cold-Start |
+|---|---|---|---|
+| Baseline (ID) | 0.4687 ± 0.0048 | 0.6150 ± 0.0054 | 0.5011 ± 0.0062 |
+| V1 (MiniLM, text-replace) | 0.4178 ± 0.0025 | 0.6047 ± 0.0064 | 0.4945 ± 0.0035 |
+| V2 (MiniLM, align) | 0.4930 ± 0.0098 | 0.6177 ± 0.0119 | 0.5027 ± 0.0106 |
+
+*See the `test_overall` pooling caveat below the Amazon results table further up this README — the seen/cold-start columns are the primary comparison for Amazon.
+
+**Paired significance tests (5 shared seeds each):**
+
+The only statistically significant Ali-CCP result at n=5 is **V2 beating V1 on the cold-start segment** (mean diff +0.0177, t=-5.65, p=0.0048). Every other Ali-CCP comparison — Baseline vs V1/V2 (overall, seen, or cold-start), and MiniLM vs MPNet for V1/V1-Full/V2 — is not distinguishable from seed noise (all p > 0.10). This means "MPNet doesn't help over MiniLM" and most of the Baseline-vs-LLM-variant deltas reported earlier in this README should be described as directional, not significant, findings in Results.
+
+On Amazon, Baseline/V1/V2 differences on `test_overall` are all significant (p < 0.01), but this metric is confounded (see pooling caveat) and none of the underlying seen/cold-start subgroup differences are themselves significant — recommend not citing the Amazon `test_overall` p-values without that caveat attached. Full test log: `results/significance_tests_full.log`; full comparison table with all tests: `results/multiseed_comparison_summary.md`.
+
+**Amazon V3-hybrid: routing direction had to be flipped, and the fix is itself a finding.** The first `amazon_v3_hybrid.py` run mechanically copied Ali-CCP's routing rule (hard segment `short_context & cold_start` → V1). Per-cell breakdown showed this is backwards for Amazon: V2 wins the hard segment here (0.5173 vs V1's 0.4872), while V1 wins the other three cells (long&seen, long&cold, short&seen) — the reverse of Ali-CCP, where V1 wins the hard segment. Flipped the rule (hard segment → V2, elsewhere → V1) and reran:
+
+| | overall AUC | hard segment AUC |
+|---|---|---|
+| V1 alone | 0.4209 | 0.4872 |
+| V2 alone | 0.5088 | 0.5173 |
+| V3-hybrid (wrong direction) | 0.4443 | 0.4872 |
+| V3-hybrid (correct direction) | 0.4944 | 0.5173 |
+
+This is the direct empirical answer to the supervisor's meeting-comment question about whether a real-text dataset would confirm the original prediction that V2 should win the cold-start/short-context setting: on Ali-CCP's pseudo-text it doesn't (V1 wins), on Amazon's real text it does (V2 wins) — the routing direction that's optimal flips between the two datasets. One caveat: even with the corrected direction, the hybrid's *overall/pooled* AUC (0.4944) is still below V2 alone (0.5088), despite winning or tying V2 in every individual cell — the same AUC-pooling effect as the `test_overall` caveat above (seen cells ~12% positive rate vs. cold-start cells ~47%), not a routing error. Unlike Ali-CCP, where the hybrid's overall AUC (0.5649) cleanly beat every individual model, Amazon's per-cell breakdown is the number to cite, not `overall`. Only a single seed (seed=42 checkpoints); this cell-level result has not been significance-tested. Original mis-routed result preserved as `v3_hybrid_results_ORIGINAL_MISROUTED.json` for reference.
+
+All raw per-model JSON summaries: `results/multiseed_summaries/`.
+
 ### Overleaf preparation
 
 `docs/references.bib` (11 core citations + 3 embedding-model citations) and `docs/methods_results_draft.tex` (paste-ready Methods/Results draft) were prepared but not yet pasted into the Overleaf project, and are not present in this repo copy (see "Known gaps").
@@ -367,6 +419,41 @@ Both models learn real signal on seen items (AUC ~0.61, well above chance) and b
 
 **Interpretation / open point for supervisor discussion**: naive frozen-text-embedding replacement doesn't automatically beat a learned ID embedding here, even with genuine natural-language item text (unlike Ali-CCP's anonymised pseudo-text). This is a real, reportable negative result for RQ1 on this dataset, and motivates why the more involved alignment architectures (V1/V2 on Ali-CCP) are worth studying rather than assuming text embeddings are a free win.
 
+### Amazon negative-sampling non-determinism bug (found + fixed 2026-08-07)
+
+While adding a `timestamp` column to `amazon_train/val/test.csv` (needed for the Dynamic Graph / V4 work below), reran `amazon_build_dataset.py` with the *same* `SEED=42` three times (once in a Linux sandbox, twice on the actual Windows machine) and got three different cold-start rates each time (test: 23.49% originally / 23.40% / 23.65%) despite identical row counts and positive rate every time. Root cause: `add_negatives()` received `all_items` as a Python `set` and called `list(all_items)` on it — Python randomises string hashing per-process (`PYTHONHASHSEED`) since 3.3, so a set's iteration order isn't stable across runs even with everything else seeded; `rng.randrange(len(all_items))` picks the same *index* every run, but that index lands on a different item each time the set-to-list order shifts. Fixed with `sorted(all_items)` (verified: two consecutive reruns now produce byte-identical output).
+
+**Decision (agreed with supervisor-facing write-up in mind): not rerunning the already-completed Amazon Baseline/V1/V2/V3/V3-hybrid results.** Those numbers (reported throughout this README) were computed on the pre-fix dataset and remain valid as reported — they were a real, complete dataset, just not exactly reproducible from the seed alone as originally assumed. The drift this bug causes is small (cold-start rate moves by ~0.1-0.3 percentage points; row counts, positive rate, and the user/item pool are all unaffected) and doesn't change any conclusion drawn so far. The fixed, timestamp-added dataset (deterministic going forward) is used for V4 and any future Amazon work — meaning V4 is trained/evaluated on a very slightly different negative-sample instantiation than Baseline/V1/V2/V3, a documented limitation rather than a silent inconsistency.
+
+### V4: Dynamic Graph layer (2026-08-07), and a clean ablation of where the gains actually come from
+
+First model in this dissertation that implements graph/sequential structure at all — Baseline/V1/V1-Full/V2/V3 are all static two-tower models differing only in item representation. Amazon-only (Ali-CCP has no per-interaction timestamps). Deliberate scope reduction vs. DGSR (Zhang et al., TKDE 2022): single-channel target-attention (query = target item, keys/values = the user's prior interacted items) with a learned recency-decay bias from real Delta-t, in the spirit of DIN's target-attention rather than DGSR's edge-quintuple dual long/short-term channels; user-side only, item-side history aggregation left as future work. Chosen given the ~1-month submission timeline. See `src/models/amazon_dynamic_graph_v4.py` docstring for full rationale.
+
+**Pipeline additions:**
+- `amazon_build_dataset.py` updated to retain a `timestamp` column (previously dropped) — also where the negative-sampling non-determinism bug above was found and fixed.
+- `data/preprocessing/amazon_build_user_histories.py` **(new)** — precomputes each user's causal (label=1 only, strictly-earlier-timestamp) interaction sequence. 32,039 users, mean history length 3.1 / median 2 (2-core filtering guarantees >=2). At test time: 81.1% of rows have >=1 prior history item available (median 1-2 among those), 18.9% have zero (first-ever interaction for that user — falls back to user_emb alone).
+- `src/models/amazon_dynamic_graph_v4.py` **(new)** — V4, combining the graph aggregator with V2's ID+LLM alignment pattern from the start (a rough combined result was judged more valuable than a polished single-axis ablation, given the time budget).
+- `src/models/amazon_dynamic_graph_v4_id_only.py` **(new)** — ablation of V4 with the LLM/text branch removed entirely (plain ID embedding, same graph aggregator), to isolate the graph mechanism's own contribution from V2's already-established LLM-alignment contribution.
+
+**Results, mean +/- std across 5 seeds (AUC):**
+
+| Model | Test Overall | Test Seen | Test Cold-Start |
+|---|---|---|---|
+| Baseline (ID, no graph) | 0.4687 +/- 0.0048 | 0.6150 +/- 0.0054 | 0.5011 +/- 0.0062 |
+| V2 (ID + LLM align, no graph) | 0.4930 +/- 0.0098 | 0.6177 +/- 0.0119 | 0.5027 +/- 0.0106 |
+| V4-ID-Only (ID + graph, no LLM) | 0.4637 +/- 0.0095 | 0.6091 +/- 0.0079 | 0.5010 +/- 0.0038 |
+| V4 (ID + LLM align + graph) | 0.4807 +/- 0.0085 | 0.6207 +/- 0.0129 | 0.5014 +/- 0.0117 |
+
+**Paired significance tests (5 shared seeds) — a clean ablation:**
+- Baseline vs. V4-ID-Only: not significant on overall (p=0.396), seen (p=0.341), or cold-start (p=0.995). **The graph mechanism alone, with no LLM signal, produces no detectable improvement over the plain ID baseline on any metric.**
+- V4-ID-Only vs. V4 (does adding LLM alignment on top of the graph help?): not significant on overall (p=0.061, borderline) or cold-start (p=0.938).
+- V2 vs. V4 (does adding the graph on top of LLM alignment help?): V4 is **significantly worse** than V2 on test_overall (p=0.022, mean diff -0.0123). Adding the graph aggregator to V2's already-working LLM-alignment approach doesn't preserve its gain, let alone improve on it.
+- For reference, V2 vs. Baseline (established earlier) IS significant (p=0.0036) — the LLM-alignment pattern has a real, replicable effect that the graph aggregator does not.
+
+**Interpretation:** the temporal graph aggregator trains stably and learns a non-trivial recency-decay rate (~0.6, not collapsed to zero) — the mechanism itself works — but produces no measurable benefit on this dataset, on any segment, including cold-start (the segment this layer was specifically expected to help most). The most likely explanation, well-supported by the history-precomputation diagnostics above: per-user history here is too sparse (median 1-2 available items at prediction time) for an attention-based aggregator to have much to work with — there just isn't enough sequential signal in this dataset's density regime for a dynamic-graph mechanism to add value on top of what ID/LLM embeddings alone already capture. This is a genuine, clean negative result for the "Dynamic Graph" layer specifically (in contrast to the "LLM Encoder" layer, where V2's gain over baseline IS significant and replicable) — reportable as-is, not something to keep tuning against given the time budget; the sparsity ceiling is a property of the dataset, not obviously fixable by more epochs or a bigger MAX_HISTORY (0.0% of users even hit the current 50-item cap).
+
+Full logs: `results/v4_significance_tests.log` (V4 vs. Baseline/V1/V2 headline comparisons) and `results/v4_ablation_significance.log` (the ID-only ablation comparisons above); raw per-model summaries in `results/multiseed_summaries/amazon_v4_dynamic_graph.json` and `amazon_v4_id_only.json`.
+
 ---
 
 ## Repository Structure
@@ -388,19 +475,31 @@ dissertation-cvr-llm/
 │   ├── build_test_difficulty_segments.py
 │   ├── degree_distribution_scan_test.py              # STILL MISSING
 │   ├── amazon_download.py                            # NEW (2026-07-30) — "Text/no text dataset" experiment
-│   └── amazon_build_dataset.py                        # NEW (2026-07-30)
+│   ├── amazon_build_dataset.py                        # NEW (2026-07-30)
+│   └── amazon_build_difficulty_segments.py             # NEW (2026-08-04) — Amazon context/cold-start segments
 ├── src/
 │   ├── eval_context_segments.py
+│   ├── aggregate_multiseed_results.py                 # NEW (2026-08-04) — mean/std across seed reruns
+│   ├── significance_tests.py                          # NEW (2026-08-04) — paired t-test across seeds
 │   ├── baselines/
 │   │   ├── id_embedding_baseline.py                  # ESMM baseline (Ali-CCP)
 │   │   └── amazon_id_baseline.py                      # NEW (2026-07-30) — Amazon ID baseline
 │   └── models/
 │       ├── llm_encoder_v1.py
 │       ├── llm_encoder_v1_full.py
+│       ├── llm_encoder_v1_mpnet.py                    # NEW (2026-08-04) — V1, MPNet encoder
+│       ├── llm_encoder_v1_full_mpnet.py                # NEW (2026-08-04) — V1-Full, MPNet encoder
 │       ├── llm_encoder_v2_aligned.py
 │       ├── llm_encoder_v2_mpnet.py                    # NEW (2026-07-30) — "Different Embedders" experiment
 │       ├── llm_encoder_v3_hybrid.py                    # NEW (2026-08-02) — hybrid V3 segment router (V1+V2)
-│       └── amazon_text_embedding.py                   # NEW (2026-07-30) — Amazon real-text embedding
+│       ├── amazon_text_embedding.py                   # NEW (2026-07-30) — Amazon real-text embedding
+│       ├── amazon_v2_aligned.py                        # NEW (2026-08-04) — Amazon V2 (ID + alignment)
+│       └── amazon_v3_hybrid.py                         # NEW (2026-08-04) — Amazon hybrid V3 segment router
+├── results/
+│   ├── multiseed_comparison_summary.md                 # NEW (2026-08-05) — full comparison + significance tables
+│   ├── significance_tests_full.log                     # NEW (2026-08-05) — raw paired t-test output, all comparisons
+│   └── multiseed_summaries/                            # NEW (2026-08-05) — per-model mean/std JSON (10 files)
+├── run_all_experiments.ps1                             # NEW (2026-08-04) — runs all 10 models × 5 seeds + both V3 routers
 └── docs/
     ├── references.bib
     └── methods_results_draft.tex
@@ -469,8 +568,10 @@ Note: `Dataset/` (raw Ali-CCP + Criteo files, ~15GB) is gitignored and lives onl
 - [x] V2 — RLMRec-style ID+text alignment (≈ parity with baseline, best overall)
 - [x] Test-set difficulty segmentation (context-length × cold-start 2×2) — V1/V1-Full beat V2 in hardest cell
 - [x] Full modelling pipeline code recovered (2026-07-30, two `code_for_github` syncs) — all preprocessing, baseline, V1/V1-Full/V2, and evaluation scripts now in this repo and verified against the data; only `degree_distribution_scan_test.py` still missing (non-blocking, its output already exists) — see "Known Gaps"
-- [ ] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (**done** — MPNet vs MiniLM V2 comparison run, see "Candidate encoder shortlist": no overall gain, notable cold-start regression), "Text/no text dataset" (**done** — Amazon Reviews'23 Video_Games pipeline run to completion, results in "Amazon pipeline — status"), "Implement hybrid V3?" (**done** — `llm_encoder_v3_hybrid.py` run, beats both V1 and V2 on overall CTCVR-AUC and the hard segment, see "V3: hybrid segment router")
+- [x] Post-meeting experiments todo (2026-07-30 supervisor meeting): "Different Embedders" (**done** — MPNet vs MiniLM V2 comparison run, see "Candidate encoder shortlist": no overall gain, notable cold-start regression), "Text/no text dataset" (**done** — Amazon Reviews'23 Video_Games pipeline run to completion, results in "Amazon pipeline — status"), "Implement hybrid V3?" (**done** — `llm_encoder_v3_hybrid.py` run, beats both V1 and V2 on overall CTCVR-AUC and the hard segment, see "V3: hybrid segment router")
+- [x] Post-meeting experiments todo (2026-08-04 supervisor meeting, "LLM side" scope): multi-seed reruns (5 seeds × 10 models) with mean/std + paired t-test significance testing, MPNet variants completed for V1/V1-Full, Amazon V2-align + V3-hybrid added, Amazon V3 routing direction corrected after finding it flips relative to Ali-CCP — see "Multi-seed reruns, MPNet completion, Amazon V2/V3, and significance testing"
 - [ ] Overleaf write-up — `references.bib` / `methods_results_draft.tex` drafted but not pasted in, and not present in this repo copy; also on the post-meeting todo ("Move report draft to Overleaf, share with AS", "Review methods & Results next week", "Define cold start")
+- [x] Dynamic Graph layer implementation (2026-08-07) — V4 (single-channel target-attention + recency-decay, DGSR-lite) built and evaluated on Amazon, 5 seeds, plus an ID-only ablation. Result: a clean, honest negative finding — the graph mechanism itself shows no significant benefit on any metric (including cold-start), most likely due to sparse per-user history (median 1-2 items); the LLM-alignment layer (V2) remains the dissertation's one significant, replicable result. See "V4: Dynamic Graph layer" above. Delayed Feedback Correction remains future-work-only, not implemented.
 - [ ] Dissertation write-up
 
 ---

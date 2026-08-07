@@ -1,0 +1,180 @@
+==================================================================
+### Baseline vs V1 | test_overall.ctcvr_auc
+Comparing Baseline vs V1 on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5500010056286473, 0.553887094480248, 0.5627098043046652, 0.5560365416718145, 0.5585307470958882]
+  V1: [0.5859198161998155, 0.5376856605974584, 0.5299394266767421, 0.5547913105065208, 0.5796281917934956]
+
+Mean difference (V1 - Baseline): +0.00136
+Paired t-test: t=-0.1099, p=0.9178
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V2 | test_overall.ctcvr_auc
+Comparing Baseline vs V2 on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5500010056286473, 0.553887094480248, 0.5627098043046652, 0.5560365416718145, 0.5585307470958882]
+  V2: [0.5585808001068839, 0.5576270618978798, 0.5616104237719118, 0.5488032624029928, 0.5602573030188971]
+
+Mean difference (V2 - Baseline): +0.00114
+Paired t-test: t=-0.4357, p=0.6855
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V1 vs V2 | test_overall.ctcvr_auc
+Comparing V1 vs V2 on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1: [0.5859198161998155, 0.5376856605974584, 0.5299394266767421, 0.5547913105065208, 0.5796281917934956]
+  V2: [0.5585808001068839, 0.5576270618978798, 0.5616104237719118, 0.5488032624029928, 0.5602573030188971]
+
+Mean difference (V2 - V1): -0.00022
+Paired t-test: t=0.0192, p=0.9856
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V1 | test_cold_start_items.ctcvr_auc
+Comparing Baseline vs V1 on test_cold_start_items.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5595708713899527, 0.5586081468436206, 0.5563317613086772, 0.5526118220958709, 0.5596090394842756]
+  V1: [0.5606507295768626, 0.5290679037943657, 0.5491202694504285, 0.5380211936078322, 0.5542641047627836]
+
+Mean difference (V1 - Baseline): -0.01112
+Paired t-test: t=2.1231, p=0.1010
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V2 | test_cold_start_items.ctcvr_auc
+Comparing Baseline vs V2 on test_cold_start_items.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5595708713899527, 0.5586081468436206, 0.5563317613086772, 0.5526118220958709, 0.5596090394842756]
+  V2: [0.5723188896863396, 0.5556700638774764, 0.5724017770547731, 0.5537168025628538, 0.5653088122754666]
+
+Mean difference (V2 - Baseline): +0.00654
+Paired t-test: t=-1.8510, p=0.1378
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V1 vs V2 | test_cold_start_items.ctcvr_auc
+Comparing V1 vs V2 on test_cold_start_items.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1: [0.5606507295768626, 0.5290679037943657, 0.5491202694504285, 0.5380211936078322, 0.5542641047627836]
+  V2: [0.5723188896863396, 0.5556700638774764, 0.5724017770547731, 0.5537168025628538, 0.5653088122754666]
+
+Mean difference (V2 - V1): +0.01766
+Paired t-test: t=-5.6540, p=0.0048
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### Baseline vs V2 | test_seen_items.ctcvr_auc
+Comparing Baseline vs V2 on test_seen_items.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5443377127743574, 0.5515954240353638, 0.5724151738384469, 0.5601359317920864, 0.5576321495751728]
+  V2: [0.5524230829188564, 0.555149370602286, 0.5655587072621263, 0.5558535261135622, 0.5537669510467949]
+
+Mean difference (V2 - Baseline): -0.00067
+Paired t-test: t=0.2409, p=0.8215
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V1 | test_seen_items.ctcvr_auc
+Comparing Baseline vs V1 on test_seen_items.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5443377127743574, 0.5515954240353638, 0.5724151738384469, 0.5601359317920864, 0.5576321495751728]
+  V1: [0.6041908517320606, 0.5430201679960428, 0.5157596546981595, 0.5668145529967347, 0.597859247092124]
+
+Mean difference (V1 - Baseline): +0.00831
+Paired t-test: t=-0.4106, p=0.7024
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V1-MiniLM vs V1-MPNet | test_overall.ctcvr_auc
+Comparing V1-MiniLM vs V1-MPNet on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1-MiniLM: [0.5859198161998155, 0.5376856605974584, 0.5299394266767421, 0.5547913105065208, 0.5796281917934956]
+  V1-MPNet: [0.5430294225392985, 0.531790591482038, 0.5368875103795242, 0.5551768807410621, 0.564023688301091]
+
+Mean difference (V1-MPNet - V1-MiniLM): -0.01141
+Paired t-test: t=1.3110, p=0.2600
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V2-MiniLM vs V2-MPNet | test_overall.ctcvr_auc
+Comparing V2-MiniLM vs V2-MPNet on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V2-MiniLM: [0.5585808001068839, 0.5576270618978798, 0.5616104237719118, 0.5488032624029928, 0.5602573030188971]
+  V2-MPNet: [0.5350454508233226, 0.5649952009964343, 0.5570753381067173, 0.5615736306929356, 0.5692368118985981]
+
+Mean difference (V2-MPNet - V2-MiniLM): +0.00021
+Paired t-test: t=-0.0317, p=0.9762
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V1Full-MiniLM vs V1Full-MPNet | test_overall.ctcvr_auc
+Comparing V1Full-MiniLM vs V1Full-MPNet on test_overall.ctcvr_auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1Full-MiniLM: [0.5119157153898535, 0.5125259380360361, 0.512036262969018, 0.5103811009335106, 0.5135392769817348]
+  V1Full-MPNet: [0.49969135461052, 0.5156604674449274, 0.50248081476033, 0.5183449780341971, 0.5191968388781781]
+
+Mean difference (V1Full-MPNet - V1Full-MiniLM): -0.00100
+Paired t-test: t=0.2434, p=0.8197
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Amazon-Baseline vs Amazon-V1 | test_overall.auc
+Comparing Amazon-Baseline vs Amazon-V1 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-Baseline: [0.47444979659349085, 0.46611714335155097, 0.46982031327613616, 0.46197356056272365, 0.471326634970823]
+  Amazon-V1: [0.415595361238305, 0.4198724064675819, 0.42089976847199917, 0.4172175313952643, 0.4155685921511596]
+
+Mean difference (Amazon-V1 - Amazon-Baseline): -0.05091
+Paired t-test: t=18.5754, p=0.0000
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### Amazon-Baseline vs Amazon-V2 | test_overall.auc
+Comparing Amazon-Baseline vs Amazon-V2 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-Baseline: [0.47444979659349085, 0.46611714335155097, 0.46982031327613616, 0.46197356056272365, 0.471326634970823]
+  Amazon-V2: [0.4898736619311744, 0.49032844472750137, 0.5088390021673372, 0.4822591273709792, 0.49392675384241147]
+
+Mean difference (Amazon-V2 - Amazon-Baseline): +0.02431
+Paired t-test: t=-6.1305, p=0.0036
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### Amazon-V1 vs Amazon-V2 | test_overall.auc
+Comparing Amazon-V1 vs Amazon-V2 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-V1: [0.415595361238305, 0.4198724064675819, 0.42089976847199917, 0.4172175313952643, 0.4155685921511596]
+  Amazon-V2: [0.4898736619311744, 0.49032844472750137, 0.5088390021673372, 0.4822591273709792, 0.49392675384241147]
+
+Mean difference (Amazon-V2 - Amazon-V1): +0.07521
+Paired t-test: t=-19.4590, p=0.0000
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### Amazon-Baseline vs Amazon-V1 | test_cold_start_items.auc
+Comparing Amazon-Baseline vs Amazon-V1 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-Baseline: [0.5064012912345327, 0.501189491783483, 0.5022559474736983, 0.4905757663475414, 0.5048295657446704]
+  Amazon-V1: [0.4966428765353793, 0.49327094262320276, 0.4937008890288934, 0.4990154895405722, 0.4897788844522582]
+
+Mean difference (Amazon-V1 - Amazon-Baseline): -0.00657
+Paired t-test: t=1.6600, p=0.1722
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Amazon-Baseline vs Amazon-V2 | test_cold_start_items.auc
+Comparing Amazon-Baseline vs Amazon-V2 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-Baseline: [0.5064012912345327, 0.501189491783483, 0.5022559474736983, 0.4905757663475414, 0.5048295657446704]
+  Amazon-V2: [0.5038339104973614, 0.5082774290671204, 0.5015803131845028, 0.4856742915935308, 0.5139833091872783]
+
+Mean difference (Amazon-V2 - Amazon-Baseline): +0.00162
+Paired t-test: t=-0.5875, p=0.5885
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Amazon-V1 vs Amazon-V2 | test_cold_start_items.auc
+Comparing Amazon-V1 vs Amazon-V2 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-V1: [0.4966428765353793, 0.49327094262320276, 0.4937008890288934, 0.4990154895405722, 0.4897788844522582]
+  Amazon-V2: [0.5038339104973614, 0.5082774290671204, 0.5015803131845028, 0.4856742915935308, 0.5139833091872783]
+
+Mean difference (Amazon-V2 - Amazon-V1): +0.00819
+Paired t-test: t=-1.3217, p=0.2568
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Amazon-Baseline vs Amazon-V2 | test_seen_items.auc
+Comparing Amazon-Baseline vs Amazon-V2 on test_seen_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Amazon-Baseline: [0.6186949671780934, 0.6133893616538719, 0.6161734924384874, 0.60642682856124, 0.6200706213508662]
+  Amazon-V2: [0.6189369960637563, 0.6195381950703838, 0.5975209601753342, 0.6241324747182035, 0.6282277627842202]
+
+Mean difference (Amazon-V2 - Amazon-Baseline): +0.00272
+Paired t-test: t=-0.4506, p=0.6756
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+

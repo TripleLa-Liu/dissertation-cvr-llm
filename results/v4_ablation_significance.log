@@ -1,0 +1,60 @@
+==================================================================
+### Baseline vs V4-ID-Only | test_overall.auc
+Comparing Baseline vs V4-ID-Only on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.47444979659349085, 0.46611714335155097, 0.46982031327613616, 0.46197356056272365, 0.471326634970823]
+  V4-ID-Only: [0.4500121627632735, 0.46666421786419027, 0.46111518064025525, 0.46426765281542015, 0.4762100669847073]
+
+Mean difference (V4-ID-Only - Baseline): -0.00508
+Paired t-test: t=0.9496, p=0.3961
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V4-ID-Only | test_seen_items.auc
+Comparing Baseline vs V4-ID-Only on test_seen_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.6186949671780934, 0.6133893616538719, 0.6161734924384874, 0.60642682856124, 0.6200706213508662]
+  V4-ID-Only: [0.60058448918533, 0.6059807548083735, 0.6048330511329091, 0.6205060778766831, 0.6137338492430302]
+
+Mean difference (V4-ID-Only - Baseline): -0.00582
+Paired t-test: t=1.0811, p=0.3405
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V4-ID-Only | test_cold_start_items.auc
+Comparing Baseline vs V4-ID-Only on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5064012912345327, 0.501189491783483, 0.5022559474736983, 0.4905757663475414, 0.5048295657446704]
+  V4-ID-Only: [0.4949496284747207, 0.5021637027531004, 0.49992678938183444, 0.5035984403250398, 0.5044746306004783]
+
+Mean difference (V4-ID-Only - Baseline): -0.00003
+Paired t-test: t=0.0071, p=0.9947
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V4-ID-Only vs V4 | test_overall.auc
+Comparing V4-ID-Only vs V4 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V4-ID-Only: [0.4500121627632735, 0.46666421786419027, 0.46111518064025525, 0.46426765281542015, 0.4762100669847073]
+  V4: [0.4798604862848934, 0.4875998912557197, 0.4910104692748303, 0.4730399022031958, 0.472003558832701]
+
+Mean difference (V4 - V4-ID-Only): +0.01705
+Paired t-test: t=-2.5935, p=0.0605
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V4-ID-Only vs V4 | test_cold_start_items.auc
+Comparing V4-ID-Only vs V4 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V4-ID-Only: [0.4949496284747207, 0.5021637027531004, 0.49992678938183444, 0.5035984403250398, 0.5044746306004783]
+  V4: [0.48326701207549455, 0.507494843995586, 0.5102366843610686, 0.5099271990516621, 0.49599321472439106]
+
+Mean difference (V4 - V4-ID-Only): +0.00036
+Paired t-test: t=-0.0826, p=0.9382
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V2 vs V4 | test_overall.auc
+Comparing V2 vs V4 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V2: [0.4898736619311744, 0.49032844472750137, 0.5088390021673372, 0.4822591273709792, 0.49392675384241147]
+  V4: [0.4798604862848934, 0.4875998912557197, 0.4910104692748303, 0.4730399022031958, 0.472003558832701]
+
+Mean difference (V4 - V2): -0.01234
+Paired t-test: t=3.6436, p=0.0219
+-> Difference is statistically significant at alpha=0.05.
+

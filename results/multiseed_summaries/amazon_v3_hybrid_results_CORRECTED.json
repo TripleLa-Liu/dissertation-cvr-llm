@@ -1,0 +1,130 @@
+{
+  "v1_text_replace": {
+    "overall": {
+      "n": 49640,
+      "positive_rate": 0.2,
+      "auc": 0.42089976847199917
+    },
+    "long_context": {
+      "n": 26760,
+      "positive_rate": 0.2,
+      "auc": 0.4282525611732256
+    },
+    "short_context": {
+      "n": 22880,
+      "positive_rate": 0.2,
+      "auc": 0.4124181832222083
+    },
+    "long_context & seen": {
+      "n": 20535,
+      "positive_rate": 0.12013635256878501,
+      "auc": 0.6060833980425612
+    },
+    "long_context & cold_start": {
+      "n": 6225,
+      "positive_rate": 0.4634538152610442,
+      "auc": 0.4993788852105149
+    },
+    "short_context & seen": {
+      "n": 17447,
+      "positive_rate": 0.11572190061328595,
+      "auc": 0.6070474772780186
+    },
+    "short_context & cold_start": {
+      "n": 5433,
+      "positive_rate": 0.4706423706975888,
+      "auc": 0.48720392029733206
+    }
+  },
+  "v2_aligned": {
+    "overall": {
+      "n": 49640,
+      "positive_rate": 0.2,
+      "auc": 0.5088390021673372
+    },
+    "long_context": {
+      "n": 26760,
+      "positive_rate": 0.2,
+      "auc": 0.5048650054824929
+    },
+    "short_context": {
+      "n": 22880,
+      "positive_rate": 0.2,
+      "auc": 0.5133673469095371
+    },
+    "long_context & seen": {
+      "n": 20535,
+      "positive_rate": 0.12013635256878501,
+      "auc": 0.597008652355884
+    },
+    "long_context & cold_start": {
+      "n": 6225,
+      "positive_rate": 0.4634538152610442,
+      "auc": 0.48771396548324497
+    },
+    "short_context & seen": {
+      "n": 17447,
+      "positive_rate": 0.11572190061328595,
+      "auc": 0.5988158353818656
+    },
+    "short_context & cold_start": {
+      "n": 5433,
+      "positive_rate": 0.4706423706975888,
+      "auc": 0.5172654574450783
+    }
+  },
+  "v3_hybrid": {
+    "overall": {
+      "n": 49640,
+      "positive_rate": 0.2,
+      "auc": 0.4944397126068369
+    },
+    "long_context": {
+      "n": 26760,
+      "positive_rate": 0.2,
+      "auc": 0.4282525611732256
+    },
+    "short_context": {
+      "n": 22880,
+      "positive_rate": 0.2,
+      "auc": 0.5725822771456581
+    },
+    "long_context & seen": {
+      "n": 20535,
+      "positive_rate": 0.12013635256878501,
+      "auc": 0.6060833980425612
+    },
+    "long_context & cold_start": {
+      "n": 6225,
+      "positive_rate": 0.4634538152610442,
+      "auc": 0.4993788852105149
+    },
+    "short_context & seen": {
+      "n": 17447,
+      "positive_rate": 0.11572190061328595,
+      "auc": 0.6070474772780186
+    },
+    "short_context & cold_start": {
+      "n": 5433,
+      "positive_rate": 0.4706423706975888,
+      "auc": 0.5172654574450783
+    }
+  },
+  "baseline_overall_only": {
+    "overall": {
+      "n_rows": 49640,
+      "positive_rate": 0.20000000298023224,
+      "auc": 0.46982031327613616
+    },
+    "seen": {
+      "n_rows": 37982,
+      "positive_rate": 0.11810857802629471,
+      "auc": 0.6161734924384874
+    },
+    "cold_start": {
+      "n_rows": 11658,
+      "positive_rate": 0.4668039083480835,
+      "auc": 0.5022559474736983
+    }
+  }
+}

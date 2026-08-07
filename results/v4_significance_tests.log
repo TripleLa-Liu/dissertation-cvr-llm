@@ -1,0 +1,80 @@
+==================================================================
+### Baseline vs V4 | test_overall.auc
+Comparing Baseline vs V4 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.47444979659349085, 0.46611714335155097, 0.46982031327613616, 0.46197356056272365, 0.471326634970823]
+  V4: [0.4798604862848934, 0.4875998912557197, 0.4910104692748303, 0.4730399022031958, 0.472003558832701]
+
+Mean difference (V4 - Baseline): +0.01197
+Paired t-test: t=-2.8731, p=0.0453
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### V1 vs V4 | test_overall.auc
+Comparing V1 vs V4 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1: [0.415595361238305, 0.4198724064675819, 0.42089976847199917, 0.4172175313952643, 0.4155685921511596]
+  V4: [0.4798604862848934, 0.4875998912557197, 0.4910104692748303, 0.4730399022031958, 0.472003558832701]
+
+Mean difference (V4 - V1): +0.06287
+Paired t-test: t=-21.6256, p=0.0000
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### V2 vs V4 | test_overall.auc
+Comparing V2 vs V4 on test_overall.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V2: [0.4898736619311744, 0.49032844472750137, 0.5088390021673372, 0.4822591273709792, 0.49392675384241147]
+  V4: [0.4798604862848934, 0.4875998912557197, 0.4910104692748303, 0.4730399022031958, 0.472003558832701]
+
+Mean difference (V4 - V2): -0.01234
+Paired t-test: t=3.6436, p=0.0219
+-> Difference is statistically significant at alpha=0.05.
+
+==================================================================
+### Baseline vs V4 | test_cold_start_items.auc
+Comparing Baseline vs V4 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.5064012912345327, 0.501189491783483, 0.5022559474736983, 0.4905757663475414, 0.5048295657446704]
+  V4: [0.48326701207549455, 0.507494843995586, 0.5102366843610686, 0.5099271990516621, 0.49599321472439106]
+
+Mean difference (V4 - Baseline): +0.00033
+Paired t-test: t=-0.0451, p=0.9662
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V1 vs V4 | test_cold_start_items.auc
+Comparing V1 vs V4 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V1: [0.4966428765353793, 0.49327094262320276, 0.4937008890288934, 0.4990154895405722, 0.4897788844522582]
+  V4: [0.48326701207549455, 0.507494843995586, 0.5102366843610686, 0.5099271990516621, 0.49599321472439106]
+
+Mean difference (V4 - V1): +0.00690
+Paired t-test: t=-1.2882, p=0.2672
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V2 vs V4 | test_cold_start_items.auc
+Comparing V2 vs V4 on test_cold_start_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V2: [0.5038339104973614, 0.5082774290671204, 0.5015803131845028, 0.4856742915935308, 0.5139833091872783]
+  V4: [0.48326701207549455, 0.507494843995586, 0.5102366843610686, 0.5099271990516621, 0.49599321472439106]
+
+Mean difference (V4 - V2): -0.00129
+Paired t-test: t=0.1536, p=0.8854
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### Baseline vs V4 | test_seen_items.auc
+Comparing Baseline vs V4 on test_seen_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  Baseline: [0.6186949671780934, 0.6133893616538719, 0.6161734924384874, 0.60642682856124, 0.6200706213508662]
+  V4: [0.6079626677949367, 0.6126493282885521, 0.6144240339852788, 0.6382140581271729, 0.6302332991981148]
+
+Mean difference (V4 - Baseline): +0.00575
+Paired t-test: t=-0.7865, p=0.4756
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
+==================================================================
+### V2 vs V4 | test_seen_items.auc
+Comparing V2 vs V4 on test_seen_items.auc, paired across 5 shared seed(s): [123, 2026, 42, 7, 99]
+  V2: [0.6189369960637563, 0.6195381950703838, 0.5975209601753342, 0.6241324747182035, 0.6282277627842202]
+  V4: [0.6079626677949367, 0.6126493282885521, 0.6144240339852788, 0.6382140581271729, 0.6302332991981148]
+
+Mean difference (V4 - V2): +0.00303
+Paired t-test: t=-0.5477, p=0.6130
+-> Difference is NOT statistically significant at alpha=0.05 (consistent with the gap being noise from seed variance alone).
+
