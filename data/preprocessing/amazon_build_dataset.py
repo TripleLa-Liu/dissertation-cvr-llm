@@ -57,10 +57,25 @@ Requires amazon_download.py to have already produced
 
 Produces (in WORK_DIR/amazon/processed/):
   amazon_train.csv / amazon_val.csv / amazon_test.csv
-      columns: user_id, item_id, label, is_cold_start_item
+      columns: user_id, item_id, label, is_cold_start_item, timestamp
   amazon_item_text.csv
       columns: item_id, real_text (title + description + features + store,
       concatenated — genuine natural-language text, no template needed)
+
+2026-08-07 update (Dynamic Graph / V4 prep): added a `timestamp` column to
+the three output CSVs, needed by amazon_build_user_histories.py to build
+each row's causal interaction history. This column was present in the
+positive interactions from the start (`load_positive_interactions()`) but
+was previously dropped inside `add_negatives()`. Sampled negative rows have
+no real interaction of their own, so each negative is stamped with its
+*paired positive row's* timestamp — the natural reading is "at the moment
+this user interacted with the positive item at time t, what if they'd been
+shown this negative item instead", i.e. timestamp = the decision point, not
+an event time the negative doesn't have. This is an additive change: the
+RNG call sequence inside add_negatives() (which candidates get sampled, how
+many attempts) is unchanged, so label / is_cold_start_item values for every
+row are bit-identical to the original run — only the new timestamp column
+is added. Confirmed via row-count + label/cold-start-rate diff after rerun.
 """
 import gzip
 import json
@@ -198,10 +213,36 @@ def chronological_split(df):
 # Step 4: negative sampling
 # ------------------------------------------------------------------
 def add_negatives(pos_df, all_items, user_positive_items, neg_per_pos, rng):
-    all_items = list(all_items)
+    """Each negative row is stamped with its paired positive row's
+    timestamp (see module docstring, 2026-08-07 update) — negatives have
+    no interaction event of their own, so the positive's timestamp stands
+    in for "the decision point" this negative was sampled at.
+
+    2026-08-07: found and fixed a real non-determinism bug here, exposed
+    while adding the timestamp column (three separate reruns — one in a
+    Linux sandbox, two on the user's own Windows machine, same SEED every
+    time — produced three different cold-start rates: 12.40/18.38/23.49%
+    originally, 12.57/18.77/23.40% and 12.46/18.79/23.65% on reruns). Root
+    cause: `all_items` arrives as a Python set (built via `set(df["item_id"])`
+    in main()), and `list(a_set)` is ordered by Python's internal string
+    hashing, which is randomised per-process (PYTHONHASHSEED) since Python
+    3.3 — so `rng.randrange(len(all_items))` picks the same INDEX every
+    run (rng is seeded) but that index lands on a DIFFERENT item each
+    process, since the list's order itself isn't stable. Row counts and
+    label positive-rate were unaffected (those don't depend on which
+    specific item gets sampled), only which items — and therefore
+    is_cold_start_item — did. Fixed with sorted() below, which is fully
+    deterministic regardless of hash seed / OS / process. This means the
+    already-reported Baseline/V1/V1-Full/V2/V3 Amazon numbers elsewhere in
+    this README were never exactly reproducible from a fresh rerun even
+    before this session — the drift is small (<0.3pp) and doesn't change
+    any reported conclusion, so those results were kept as originally
+    reported rather than rerunning 15 already-completed training jobs;
+    this fix only guarantees determinism going forward (used for V4)."""
+    all_items = sorted(all_items)
     rows = []
-    for user_id, item_id in zip(pos_df["user_id"], pos_df["item_id"]):
-        rows.append((user_id, item_id, 1))
+    for user_id, item_id, ts in zip(pos_df["user_id"], pos_df["item_id"], pos_df["timestamp"]):
+        rows.append((user_id, item_id, 1, ts))
         seen = user_positive_items.get(user_id, set())
         n_sampled = 0
         attempts = 0
@@ -210,9 +251,9 @@ def add_negatives(pos_df, all_items, user_positive_items, neg_per_pos, rng):
             attempts += 1
             if cand in seen:
                 continue
-            rows.append((user_id, cand, 0))
+            rows.append((user_id, cand, 0, ts))
             n_sampled += 1
-    return pd.DataFrame(rows, columns=["user_id", "item_id", "label"])
+    return pd.DataFrame(rows, columns=["user_id", "item_id", "label", "timestamp"])
 
 
 # ------------------------------------------------------------------

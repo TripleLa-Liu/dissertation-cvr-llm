@@ -27,6 +27,11 @@ __pycache__/
 *.toc
 *.synctex.gz
 
+# ...but not the curated analysis logs under results/ (paired significance
+# test output, small and meant to be read/cited, not LaTeX/training noise).
+# Per-run training logs in logs/ (many, large, one per seed) stay ignored.
+!results/*.log
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -93,7 +93,7 @@ def build_vocab(series):
 
 
 def encode(series, vocab):
-    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values
+    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values.copy()
 
 
 def make_tower(in_dim, hidden):

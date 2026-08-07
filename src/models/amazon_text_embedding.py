@@ -29,6 +29,7 @@ better than a from-scratch embedding table.
 Requires amazon_item_text.csv (from amazon_build_dataset.py) and
 sentence-transformers installed.
 """
+import argparse
 import json
 import os
 import pickle
@@ -79,6 +80,23 @@ WEIGHT_DECAY = 1e-6
 SEED = 42
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def parse_args():
+    """--seed lets this script be rerun under multiple random seeds for
+    mean/std reporting (2026-08-04 supervisor request). Default (42) keeps
+    the original unsuffixed checkpoint/metrics filenames."""
+    p = argparse.ArgumentParser()
+    p.add_argument("--seed", type=int, default=SEED,
+                   help="random seed (default: 42, the original single-run seed)")
+    return p.parse_args()
+
+
+def seed_suffixed(path, seed):
+    if seed == SEED:
+        return path
+    root, ext = os.path.splitext(path)
+    return f"{root}_seed{seed}{ext}"
 
 
 # ------------------------------------------------------------------
@@ -142,12 +160,12 @@ def build_vocab(series):
 
 
 def encode(series, vocab):
-    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values
+    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values.copy()
 
 
 def make_tensors(df, user_vocab, item_id_to_row, unk_row):
     u = encode(df["user_id"], user_vocab)
-    i_row = df["item_id"].map(lambda x: item_id_to_row.get(x, unk_row)).astype("int64").values
+    i_row = df["item_id"].map(lambda x: item_id_to_row.get(x, unk_row)).astype("int64").values.copy()
     label = df["label"].values.astype("float32")
     return torch.from_numpy(u), torch.from_numpy(i_row), torch.from_numpy(label)
 
@@ -217,8 +235,15 @@ def compute_metrics(preds, labels, mask=None):
 
 
 def main():
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
+    args = parse_args()
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    checkpoint_path = seed_suffixed(CHECKPOINT_PATH, seed)
+    metrics_path = seed_suffixed(METRICS_PATH, seed)
+    if seed != SEED:
+        print(f"Running with --seed={seed} (non-default): outputs -> "
+              f"{os.path.basename(checkpoint_path)}, {os.path.basename(metrics_path)}")
 
     item_llm_data = build_item_llm_embeddings()
     item_id_to_row = item_llm_data["item_id_to_row"]
@@ -272,7 +297,7 @@ def main():
             best_val_auc = val_auc
             best_epoch = epoch
             patience_left = PATIENCE
-            torch.save(model.state_dict(), CHECKPOINT_PATH)
+            torch.save(model.state_dict(), checkpoint_path)
         else:
             patience_left -= 1
             if patience_left <= 0:
@@ -280,9 +305,9 @@ def main():
                 break
 
     print(f"\nLoading best checkpoint (epoch {best_epoch}) for final evaluation ...")
-    model.load_state_dict(torch.load(CHECKPOINT_PATH))
+    model.load_state_dict(torch.load(checkpoint_path))
 
-    results = {"best_epoch": best_epoch, "lm_name": LM_NAME, "n_users_train_vocab": n_users}
+    results = {"seed": seed, "best_epoch": best_epoch, "lm_name": LM_NAME, "n_users_train_vocab": n_users}
 
     preds, labels = predict(model, val_loader)
     results["val"] = compute_metrics(preds, labels)
@@ -297,9 +322,9 @@ def main():
     print("=" * 70)
     print(json.dumps(results, indent=2))
 
-    with open(METRICS_PATH, "w") as f:
+    with open(metrics_path, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nSaved metrics to {METRICS_PATH}")
+    print(f"\nSaved metrics to {metrics_path}")
     print(f"\nCompare against amazon_baseline_results/amazon_id_baseline_metrics.json "
           f"to answer the 'text vs ID, with genuine real text' question.")
 

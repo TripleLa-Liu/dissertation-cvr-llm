@@ -33,6 +33,7 @@ attributes, which is the mechanism this variant is testing.
 Requires item_pseudo_text.csv (from extract_item_pseudo_text.py) and
 sentence-transformers installed.
 """
+import argparse
 import json
 import os
 import pickle
@@ -84,6 +85,27 @@ WEIGHT_DECAY = 1e-6
 SEED = 42
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def parse_args():
+    """--seed lets this script be rerun under multiple random seeds for
+    mean/std reporting (2026-08-04 supervisor request). Default (42) keeps
+    the original unsuffixed checkpoint/metrics filenames so downstream
+    scripts (eval_context_segments.py, llm_encoder_v3_hybrid.py) that
+    hardcode those paths keep working without any change."""
+    p = argparse.ArgumentParser()
+    p.add_argument("--seed", type=int, default=SEED,
+                   help="random seed (default: 42, the original single-run seed)")
+    return p.parse_args()
+
+
+def seed_suffixed(path, seed):
+    """Return path unchanged for the default seed (42); otherwise insert
+    '_seed{N}' before the file extension."""
+    if seed == SEED:
+        return path
+    root, ext = os.path.splitext(path)
+    return f"{root}_seed{seed}{ext}"
 
 
 # ------------------------------------------------------------------
@@ -143,7 +165,7 @@ def build_vocab(series):
 
 
 def encode(series, vocab):
-    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values
+    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values.copy()
 
 
 def encode_item_rows(series, item_id_to_row, unk_row):
@@ -151,7 +173,7 @@ def encode_item_rows(series, item_id_to_row, unk_row):
     in our splits has pseudo-text (extract_item_pseudo_text.py guarantees
     this), so there should be no missing lookups — but fall back to the
     explicit UNK row (a real, safe index) rather than -1 if it happens."""
-    rows = series.map(lambda x: item_id_to_row.get(x, unk_row)).astype("int64").values
+    rows = series.map(lambda x: item_id_to_row.get(x, unk_row)).astype("int64").values.copy()
     n_missing = int((rows == unk_row).sum())
     if n_missing:
         print(f"  WARNING: {n_missing} rows have an item_id missing from "
@@ -264,8 +286,15 @@ def compute_metrics(p_ctr, p_cvr, p_ctcvr, click, purchase, mask=None):
 
 
 def main():
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
+    args = parse_args()
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    checkpoint_path = seed_suffixed(CHECKPOINT_PATH, seed)
+    metrics_path = seed_suffixed(METRICS_PATH, seed)
+    if seed != SEED:
+        print(f"Running with --seed={seed} (non-default): outputs -> "
+              f"{os.path.basename(checkpoint_path)}, {os.path.basename(metrics_path)}")
 
     item_data = build_item_embeddings()
     item_id_to_row = item_data["item_id_to_row"]
@@ -323,7 +352,7 @@ def main():
             best_val_ctcvr_auc = val_ctcvr_auc
             best_epoch = epoch
             patience_left = PATIENCE
-            torch.save(model.state_dict(), CHECKPOINT_PATH)
+            torch.save(model.state_dict(), checkpoint_path)
         else:
             patience_left -= 1
             if patience_left <= 0:
@@ -331,9 +360,9 @@ def main():
                 break
 
     print(f"\nLoading best checkpoint (epoch {best_epoch}) for final evaluation ...")
-    model.load_state_dict(torch.load(CHECKPOINT_PATH))
+    model.load_state_dict(torch.load(checkpoint_path))
 
-    results = {"best_epoch": best_epoch, "lm_name": LM_NAME, "adapter_dim": ADAPTER_DIM,
+    results = {"seed": seed, "best_epoch": best_epoch, "lm_name": LM_NAME, "adapter_dim": ADAPTER_DIM,
                "user_embed_dim": USER_EMBED_DIM, "hidden": HIDDEN, "n_users_train_vocab": n_users}
 
     p_ctr, p_cvr, p_ctcvr, click, purchase = predict(model, val_loader)
@@ -351,9 +380,9 @@ def main():
     print("=" * 70)
     print(json.dumps(results, indent=2))
 
-    with open(METRICS_PATH, "w") as f:
+    with open(metrics_path, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nSaved metrics to {METRICS_PATH}")
+    print(f"\nSaved metrics to {metrics_path}")
 
 
 if __name__ == "__main__":

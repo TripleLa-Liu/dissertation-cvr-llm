@@ -28,6 +28,7 @@ split_train_val.py) and aliccp_test_filtered_joined.csv (from
 filter_test_and_join.py) in WORK_DIR. Saves vocab + checkpoint for reuse by
 the LLM Encoder scripts.
 """
+import argparse
 import json
 import os
 import time
@@ -70,6 +71,29 @@ SEED = 42
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def parse_args():
+    """--seed lets this script be rerun under multiple random seeds for
+    mean/std reporting (2026-08-04 supervisor request for more robust
+    comparisons). Default (42) is unchanged from all prior runs, and keeps
+    the original, unsuffixed checkpoint/metrics filenames so downstream
+    scripts (eval_context_segments.py, llm_encoder_v3_hybrid.py) that
+    hardcode those paths keep working without any change."""
+    p = argparse.ArgumentParser()
+    p.add_argument("--seed", type=int, default=SEED,
+                   help="random seed (default: 42, the original single-run seed)")
+    return p.parse_args()
+
+
+def seed_suffixed(path, seed):
+    """Return path unchanged for the default seed (42); otherwise insert
+    '_seed{N}' before the file extension so multi-seed reruns don't
+    overwrite the canonical seed=42 outputs other scripts depend on."""
+    if seed == SEED:
+        return path
+    root, ext = os.path.splitext(path)
+    return f"{root}_seed{seed}{ext}"
+
+
 # ------------------------------------------------------------------
 # Data loading + vocab
 # ------------------------------------------------------------------
@@ -88,7 +112,7 @@ def build_vocab(series):
 
 
 def encode(series, vocab):
-    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values
+    return series.map(lambda x: vocab.get(x, 0)).astype("int64").values.copy()
 
 
 def make_tensors(df, user_vocab, item_vocab):
@@ -182,8 +206,15 @@ def compute_metrics(p_ctr, p_cvr, p_ctcvr, click, purchase, mask=None):
 
 
 def main():
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
+    args = parse_args()
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    checkpoint_path = seed_suffixed(CHECKPOINT_PATH, seed)
+    metrics_path = seed_suffixed(METRICS_PATH, seed)
+    if seed != SEED:
+        print(f"Running with --seed={seed} (non-default): outputs -> "
+              f"{os.path.basename(checkpoint_path)}, {os.path.basename(metrics_path)}")
 
     print("Loading train/val/test CSVs ...")
     t0 = time.time()
@@ -238,7 +269,7 @@ def main():
             best_val_ctcvr_auc = val_ctcvr_auc
             best_epoch = epoch
             patience_left = PATIENCE
-            torch.save(model.state_dict(), CHECKPOINT_PATH)
+            torch.save(model.state_dict(), checkpoint_path)
         else:
             patience_left -= 1
             if patience_left <= 0:
@@ -247,9 +278,9 @@ def main():
                 break
 
     print(f"\nLoading best checkpoint (epoch {best_epoch}) for final evaluation ...")
-    model.load_state_dict(torch.load(CHECKPOINT_PATH))
+    model.load_state_dict(torch.load(checkpoint_path))
 
-    results = {"best_epoch": best_epoch, "embed_dim": EMBED_DIM, "hidden": HIDDEN,
+    results = {"seed": seed, "best_epoch": best_epoch, "embed_dim": EMBED_DIM, "hidden": HIDDEN,
                "n_users_train_vocab": n_users, "n_items_train_vocab": n_items}
 
     p_ctr, p_cvr, p_ctcvr, click, purchase = predict(model, val_loader)
@@ -267,10 +298,10 @@ def main():
     print("=" * 70)
     print(json.dumps(results, indent=2))
 
-    with open(METRICS_PATH, "w") as f:
+    with open(metrics_path, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nSaved metrics to {METRICS_PATH}")
-    print(f"Saved best checkpoint to {CHECKPOINT_PATH}")
+    print(f"\nSaved metrics to {metrics_path}")
+    print(f"Saved best checkpoint to {checkpoint_path}")
 
 
 if __name__ == "__main__":

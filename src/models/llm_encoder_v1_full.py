@@ -26,6 +26,7 @@ handling of these IDs, not genuine pretrained world knowledge.
 Requires item_pseudo_text.csv and user_pseudo_text.csv (from
 extract_item_pseudo_text.py / extract_user_pseudo_text.py).
 """
+import argparse
 import json
 import os
 import pickle
@@ -84,6 +85,23 @@ SEED = 42
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def parse_args():
+    """--seed lets this script be rerun under multiple random seeds for
+    mean/std reporting (2026-08-04 supervisor request). Default (42) keeps
+    the original unsuffixed checkpoint/metrics filenames."""
+    p = argparse.ArgumentParser()
+    p.add_argument("--seed", type=int, default=SEED,
+                   help="random seed (default: 42, the original single-run seed)")
+    return p.parse_args()
+
+
+def seed_suffixed(path, seed):
+    if seed == SEED:
+        return path
+    root, ext = os.path.splitext(path)
+    return f"{root}_seed{seed}{ext}"
+
+
 # ------------------------------------------------------------------
 # Frozen LLM embeddings for items / users (precomputed once, cached)
 # ------------------------------------------------------------------
@@ -131,7 +149,7 @@ def load_csv(path):
 
 
 def encode_rows(series, id_to_row, unk_row, label):
-    rows = series.map(lambda x: id_to_row.get(x, unk_row)).astype("int64").values
+    rows = series.map(lambda x: id_to_row.get(x, unk_row)).astype("int64").values.copy()
     n_missing = int((rows == unk_row).sum())
     if n_missing:
         print(f"  WARNING: {n_missing} rows have a {label} missing from its pseudo-text file "
@@ -248,8 +266,15 @@ def compute_metrics(p_ctr, p_cvr, p_ctcvr, click, purchase, mask=None):
 
 
 def main():
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
+    args = parse_args()
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    checkpoint_path = seed_suffixed(CHECKPOINT_PATH, seed)
+    metrics_path = seed_suffixed(METRICS_PATH, seed)
+    if seed != SEED:
+        print(f"Running with --seed={seed} (non-default): outputs -> "
+              f"{os.path.basename(checkpoint_path)}, {os.path.basename(metrics_path)}")
 
     item_data, lm_model = build_embeddings(ITEM_TEXT_PATH, "item_id", ITEM_EMBED_CACHE)
     user_data, _ = build_embeddings(USER_TEXT_PATH, "user_id", USER_EMBED_CACHE, model=lm_model)
@@ -301,7 +326,7 @@ def main():
             best_val_ctcvr_auc = val_ctcvr_auc
             best_epoch = epoch
             patience_left = PATIENCE
-            torch.save(model.state_dict(), CHECKPOINT_PATH)
+            torch.save(model.state_dict(), checkpoint_path)
         else:
             patience_left -= 1
             if patience_left <= 0:
@@ -309,9 +334,9 @@ def main():
                 break
 
     print(f"\nLoading best checkpoint (epoch {best_epoch}) for final evaluation ...")
-    model.load_state_dict(torch.load(CHECKPOINT_PATH))
+    model.load_state_dict(torch.load(checkpoint_path))
 
-    results = {"best_epoch": best_epoch, "lm_name": LM_NAME, "adapter_dim": ADAPTER_DIM,
+    results = {"seed": seed, "best_epoch": best_epoch, "lm_name": LM_NAME, "adapter_dim": ADAPTER_DIM,
                "hidden": HIDDEN}
 
     p_ctr, p_cvr, p_ctcvr, click, purchase = predict(model, val_loader)
@@ -329,9 +354,9 @@ def main():
     print("=" * 70)
     print(json.dumps(results, indent=2))
 
-    with open(METRICS_PATH, "w") as f:
+    with open(metrics_path, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nSaved metrics to {METRICS_PATH}")
+    print(f"\nSaved metrics to {metrics_path}")
 
 
 if __name__ == "__main__":
