@@ -322,7 +322,17 @@ All raw per-model JSON summaries: `results/multiseed_summaries/`.
 
 ### Overleaf preparation
 
-`docs/references.bib` (11 core citations + 3 embedding-model citations) and `docs/methods_results_draft.tex` (paste-ready Methods/Results draft) were prepared but not yet pasted into the Overleaf project, and are not present in this repo copy (see "Known gaps").
+`docs/references.bib` (11 core citations + 3 embedding-model citations) and `docs/methods_results_draft.tex` (paste-ready Methods/Results draft, single-round, pre-restructure) were prepared but not yet pasted into the Overleaf project, and are not present in this repo copy (see "Known gaps").
+
+### Thesis restructure + writing round (2026-08-08)
+
+The live Overleaf thesis (uploaded PDF, reviewed in full including Dr. Sinclair's `[AS: ...]` comments) had the V3 hybrid-router definition, the Amazon dataset-construction narrative, and the MPNet-vs-MiniLM encoder discussion all sitting in the Results chapter rather than Methods, and had no content at all yet for the newly-completed multi-seed/significance-testing round or the V4 Dynamic Graph layer. Restructured and drafted for pasting into Overleaf:
+
+- `docs/methods_draft.tex` **(new)** — restructured Chapter 3 (Methods): 3.1 Data now covers both datasets (Ali-CCP + Amazon Reviews'23 dataset construction, moved in from the old Results 4.3.1) plus a new context-length-segmentation subsection; 3.2 Models gets a design-rationale intro plus the V3 router definition and V4 (Dynamic Graph) architecture description, both moved in from Results; 3.3 Metrics gets the seen/cold-start split rationale and the multi-seed/significance-testing methodology; 3.4 Encoders (previously an empty `[AS: todo]`) gets the MiniLM-vs-MPNet design rationale moved in from the old Results 4.1.
+- `docs/results_draft.tex` **(new)** — restructured Chapter 4 (Results), reorganised by dataset (4.1 Ali-CCP, 4.2 Amazon) rather than by topic, each with the same shape (main model comparison, then the dataset's extension study) per the plan the user confirmed after flagging the topic-first version was too fragmented. Split into multiple small tables (main comparison, significance tests, encoder capacity, V3 routing, V4) instead of one large table, now that multi-seed mean±std and paired-significance columns don't fit one table. Includes the full multi-seed comparison matrix, significance tests, the Amazon V3 routing-direction-flip finding, and the entire V4 Dynamic Graph section (new content, not in the previous draft at all).
+- `docs/chapter_patches.md` **(new)** — Chapters 1, 2, and 5 of the live thesis describe the Dynamic Graph layer as unimplemented future work (accurate when written, outdated now that V4 exists); gives exact quoted before/after text for the 4 sentences that need updating, since only the compiled PDF (not editable source) was available for those chapters.
+
+All figures in `results_draft.tex` cross-checked against `results/multiseed_comparison_summary.md`, `results/significance_tests_full.log`, `results/v4_significance_tests.log`, and `results/v4_ablation_significance.log`; both `.tex` files checked for brace/environment balance. Not yet pasted into the live Overleaf project — that's a manual step for the user, or a follow-up session using the Chrome-based Overleaf editing already used earlier for the Introduction/Background chapters.
 
 ---
 

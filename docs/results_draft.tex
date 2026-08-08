@@ -1,0 +1,232 @@
+% ============================================================
+% results_draft.tex
+% LLM-Enhanced Dynamic Graph Networks for CVR Prediction
+% Liu Yize | UCL MSc KIDS
+% Draft (2026-08-08) — restructured Chapter 4 (Results) content.
+%
+% Organised by dataset (4.1 Ali-CCP, 4.2 Amazon), each with the same
+% internal shape: main model-variant comparison first, then the
+% dataset-specific extension study (Ali-CCP: encoder capacity;
+% Amazon: Dynamic Graph). V3 (hybrid routing) appears under both,
+% since it was run on both datasets with opposite findings.
+%
+% Numbers here are RESULTS ONLY — model/router/architecture
+% definitions live in methods_draft.tex (\S3.2) and are referenced,
+% not repeated. Tables are deliberately split (one table per
+% comparison) rather than one large combined table, since the
+% multi-seed mean+-std and significance columns don't fit/read well
+% together at this many rows.
+%
+% Cite with \cite{...} using keys from references.bib (unchanged).
+% All figures cross-checked against results/multiseed_comparison_summary.md,
+% results/significance_tests_full.log, results/v4_significance_tests.log,
+% results/v4_ablation_significance.log (2026-08-08).
+% ============================================================
+
+\chapter{Results}
+\label{ch:results}
+
+\section{Ali-CCP}
+\label{sec:results-aliccp}
+
+\subsection{Model Variant Comparison}
+\label{sec:results-aliccp-main}
+
+\begin{table}[h]
+\centering
+\caption{Ali-CCP: test CTCVR-AUC by model variant (MiniLM encoder), mean $\pm$ std across 5 seeds}
+\label{tab:aliccp-main}
+\begin{tabular}{lrrr}
+\toprule
+Model & Overall & Seen items & Cold-start items \\
+\midrule
+Baseline (ID)  & 0.5562 $\pm$ 0.0048 & 0.5572 $\pm$ 0.0105 & 0.5573 $\pm$ 0.0030 \\
+V1 (item)      & 0.5576 $\pm$ 0.0248 & 0.5655 $\pm$ 0.0372 & 0.5462 $\pm$ 0.0127 \\
+V1-Full (item+user) & 0.5121 $\pm$ 0.0011 & 0.4908 $\pm$ 0.0019 & 0.5421 $\pm$ 0.0031 \\
+V2 (ID+align)  & 0.5574 $\pm$ 0.0050 & 0.5566 $\pm$ 0.0052 & \textbf{0.5639} $\pm$ 0.0089 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Ali-CCP: paired significance tests, key comparisons (5 shared seeds)}
+\label{tab:aliccp-sig}
+\begin{tabular}{llrrl}
+\toprule
+Comparison & Segment & Mean diff & $p$ & Significant? \\
+\midrule
+Baseline vs.\ V1 & Overall & +0.0014 & 0.918 & No \\
+Baseline vs.\ V2 & Overall & +0.0011 & 0.686 & No \\
+V1 vs.\ V2       & Overall & --0.0002 & 0.986 & No \\
+Baseline vs.\ V1 & Cold-start & --0.0111 & 0.101 & No \\
+Baseline vs.\ V2 & Cold-start & +0.0065 & 0.138 & No \\
+\textbf{V1 vs.\ V2} & \textbf{Cold-start} & \textbf{+0.0177} & \textbf{0.0048} & \textbf{Yes} \\
+Baseline vs.\ V1 & Seen & +0.0083 & 0.702 & No \\
+Baseline vs.\ V2 & Seen & --0.0007 & 0.822 & No \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across 5 seeds, the only statistically significant difference among Baseline/V1/V2 on Ali-CCP is \textbf{V2 beating V1 on the cold-start segment} ($p=0.0048$). None of the Baseline-vs-V1, Baseline-vs-V2, or V1-vs-V2 overall/seen comparisons clear $\alpha=0.05$; at $n=5$ seeds these should be read as directional, not established, differences. V1-Full is omitted from the significance table (only compared descriptively here) because it is dominated by both other REPLACE-family results on every segment (Table~\ref{tab:aliccp-main}) and was not carried forward past this point.
+
+Three qualitative patterns are nonetheless consistent with the single-seed pattern reported in earlier project stages, now confirmed not to be a seed artefact for the two REPLACE variants overall: (1) V1's cold-start AUC (0.5462) trails V2's (0.5639), consistent with the significant V1-vs-V2 cold-start gap above; (2) V1-Full is uniformly the weakest model on every segment, consistent with the low cardinality of Ali-CCP's available demographic pseudo-text fields (as few as 2--4 distinct values per field) causing many users to collapse onto near-identical text; (3) V2 is the only LLM-integrated variant that is never the weakest model on any segment, consistent with retaining learned ID embeddings (Section~\ref{sec:models}) preserving memorisation capacity that both REPLACE variants (V1, V1-Full) trade away.
+
+\subsection{Encoder Capacity: MiniLM vs.\ MPNet}
+\label{sec:results-encoders}
+
+\begin{table}[h]
+\centering
+\caption{Ali-CCP test CTCVR-AUC: MiniLM (384-dim) vs.\ MPNet (768-dim), mean $\pm$ std across 5 seeds}
+\label{tab:mpnet-vs-minilm}
+\begin{tabular}{lrrr}
+\toprule
+Model & Overall & Seen items & Cold-start items \\
+\midrule
+V1 -- MiniLM      & 0.5576 $\pm$ 0.0248 & 0.5655 $\pm$ 0.0372 & 0.5462 $\pm$ 0.0127 \\
+V1 -- MPNet       & 0.5462 $\pm$ 0.0133 & 0.5427 $\pm$ 0.0188 & 0.5499 $\pm$ 0.0126 \\
+V1-Full -- MiniLM & 0.5121 $\pm$ 0.0011 & 0.4908 $\pm$ 0.0019 & 0.5421 $\pm$ 0.0031 \\
+V1-Full -- MPNet  & 0.5111 $\pm$ 0.0093 & 0.5051 $\pm$ 0.0033 & 0.5187 $\pm$ 0.0243 \\
+V2 -- MiniLM      & 0.5574 $\pm$ 0.0050 & 0.5566 $\pm$ 0.0052 & 0.5639 $\pm$ 0.0089 \\
+V2 -- MPNet       & 0.5576 $\pm$ 0.0134 & 0.5646 $\pm$ 0.0109 & 0.5492 $\pm$ 0.0247 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+None of the three MiniLM-vs-MPNet overall-AUC differences is statistically significant across 5 seeds (V1: $p=0.260$; V1-Full: $p=0.820$; V2: $p=0.976$; significance was tested on the overall metric only). This is an important revision relative to this project's earlier, single-seed ($\text{seed}=42$) observation, which showed a much larger apparent MPNet cold-start regression for V2 specifically (0.5361 vs.\ 0.5724, a $-0.036$ gap) and was provisionally read as evidence that a higher-dimensional embedding space is harder to align under an unchanged $\lambda_{\text{align}}$ and epoch budget. Under 5-seed averaging that gap shrinks to $-0.0147$ (0.5492 vs.\ 0.5639, Table~\ref{tab:aliccp-main} vs.\ Table~\ref{tab:mpnet-vs-minilm}) and is not distinguishable from seed noise. The corrected conclusion is weaker but still directionally consistent: a larger, generally stronger general-purpose encoder does not reliably improve --- and numerically tends to reduce, though not significantly --- CTCVR-AUC on Ali-CCP, on both the overall and cold-start segments, which is inconsistent with ``insufficient encoder capacity'' as the explanation for the LLM-integrated variants' modest gains over Baseline (Section~\ref{sec:discussion}).
+
+\subsection{Hybrid Segment Routing (V3)}
+\label{sec:results-v3-aliccp}
+
+Segmenting the test set by context length (Section~\ref{sec:context-segments}) crossed with seen/cold-start status reveals a crossover the aggregate CTCVR-AUC numbers hide: V2 is the strongest model overall (Table~\ref{tab:aliccp-main}), but in the single hardest cell --- short-context \& cold-start (418{,}643 rows, 20.9\% of test) --- V1 (0.5671) clearly beats V2 (0.5455) and Baseline (0.5413), exactly as the supervision-asymmetry argument in Section~\ref{sec:v3} predicts.
+
+\begin{table}[h]
+\centering
+\caption{Ali-CCP test CTCVR-AUC: V3-Hybrid vs.\ its four component models (single seed, $\text{seed}=42$)}
+\label{tab:v3-results-aliccp}
+\begin{tabular}{lrr}
+\toprule
+Model & Overall & Short-context \& cold-start \\
+\midrule
+Baseline    & 0.5610 & 0.5413 \\
+V1          & 0.5299 & 0.5671 \\
+V1-Full     & 0.5124 & 0.5564 \\
+V2          & 0.5616 & 0.5455 \\
+V3-Hybrid   & \textbf{0.5649} & \textbf{0.5671} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+V3-Hybrid wins on both counts, not only the hard segment it targets. It exactly matches V1's number in that cell (0.5671, as expected --- it is literally V1's prediction there) while also improving \emph{overall} CTCVR-AUC over pure V2 (0.5649 vs.\ 0.5616), despite V1 being the substantially weaker model everywhere else and routed to only 20.9\% of test rows. This was not guaranteed a priori (Section~\ref{sec:v3}): combining two independently-calibrated models' raw probability outputs risked hurting the pooled ranking even if each branch were locally correct. That it did not is an empirical property of this model pair on this test set. This result is single-seed only (Section~\ref{sec:metrics-multiseed}) and has not been significance-tested.
+
+\section{Amazon Reviews'23}
+\label{sec:results-amazon}
+
+\subsection{Model Variant Comparison}
+\label{sec:results-amazon-main}
+
+\begin{table}[h]
+\centering
+\caption{Amazon Reviews'23 (Video\_Games) test AUC by model variant (MiniLM), mean $\pm$ std across 5 seeds}
+\label{tab:amazon-main}
+\begin{tabular}{lrrr}
+\toprule
+Model & Overall\footnotemark & Seen items & Cold-start items \\
+\midrule
+Baseline (ID)                & 0.4687 $\pm$ 0.0048 & 0.6150 $\pm$ 0.0054 & 0.5011 $\pm$ 0.0062 \\
+V1 (item, text-replace)      & 0.4178 $\pm$ 0.0025 & 0.6047 $\pm$ 0.0064 & 0.4945 $\pm$ 0.0035 \\
+V2 (ID+align)                & \textbf{0.4930} $\pm$ 0.0098 & \textbf{0.6177} $\pm$ 0.0119 & \textbf{0.5027} $\pm$ 0.0106 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{\texttt{Test overall} pools the seen-item segment (11.8\% positive rate) and the cold-start segment (46.7\% positive rate) on the same test set. AUC does not decompose linearly across strata with very different positive rates, so \texttt{overall} can and does move in ways the segment-level numbers alone would not predict (Section~\ref{sec:discussion}); the seen/cold-start columns are the primary comparison for Amazon, not \texttt{overall}.}
+
+\begin{table}[h]
+\centering
+\caption{Amazon: paired significance tests (5 shared seeds)}
+\label{tab:amazon-sig}
+\begin{tabular}{llrrl}
+\toprule
+Comparison & Segment & Mean diff & $p$ & Significant? \\
+\midrule
+Baseline vs.\ V1 & Overall\footnotemark & --0.0509 & $<$0.0001 & Yes \\
+Baseline vs.\ V2 & Overall\footnotemark & +0.0243 & 0.0036 & Yes \\
+V1 vs.\ V2       & Overall\footnotemark & +0.0752 & $<$0.0001 & Yes \\
+Baseline vs.\ V1 & Cold-start & --0.0066 & 0.172 & No \\
+Baseline vs.\ V2 & Cold-start & +0.0016 & 0.589 & No \\
+V1 vs.\ V2       & Cold-start & +0.0082 & 0.257 & No \\
+Baseline vs.\ V2 & Seen & +0.0027 & 0.676 & No \\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{Significant on the confounded pooled metric only (see previous footnote) --- since none of the corresponding seen/cold-start subgroup differences are themselves significant, these overall-AUC gaps most likely reflect each model's score distribution interacting with the segment positive-rate mismatch, not a genuine ranking-quality difference. Not cited as evidence of a real Baseline/V1/V2 gap in Section~\ref{sec:discussion}.}
+
+Both Baseline and V2 learn real signal on seen items ($\sim$0.61--0.62 AUC, well above chance); all three models are close to chance on cold-start items ($\sim$0.49--0.50), and none of the pairwise cold-start differences reach significance. V1 (REPLACE) is the weakest model on every segment, reproducing --- now with 5-seed confirmation rather than a single run --- the Ali-CCP finding that naively substituting a frozen text embedding for a learned item ID embedding underperforms keeping the ID embedding, even with genuine natural-language item text (Section~\ref{sec:discussion}).
+
+\subsection{Hybrid Segment Routing (V3)}
+\label{sec:results-v3-amazon}
+
+The router defined in Section~\ref{sec:v3} was first run on Amazon with Ali-CCP's routing direction unchanged (hard segment $\to$ V1). This is the wrong direction for Amazon: a per-cell breakdown showed \textbf{V2} wins the hard segment here (0.5173 vs.\ V1's 0.4872), while V1 wins the other three cells (long \& seen, long \& cold-start, short \& seen) --- the reverse of Ali-CCP, where V1 wins the hard segment (Section~\ref{sec:results-v3-aliccp}). The rule was flipped (hard segment $\to$ V2, elsewhere $\to$ V1) and rerun.
+
+\begin{table}[h]
+\centering
+\caption{Amazon test AUC: V3-Hybrid before and after the routing-direction fix (single seed, $\text{seed}=42$)}
+\label{tab:v3-results-amazon}
+\begin{tabular}{lrr}
+\toprule
+Model & Overall & Hard segment (short-context \& cold-start) \\
+\midrule
+Baseline (ID)                       & 0.4698 & n/a \\
+V1 alone                            & 0.4209 & 0.4872 \\
+V2 alone                            & 0.5088 & 0.5173 \\
+V3-Hybrid (Ali-CCP direction, wrong for Amazon) & 0.4443 & 0.4872 \\
+V3-Hybrid (corrected direction)     & \textbf{0.4944} & \textbf{0.5173} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This flip is itself a finding, not just a bug fix: it is the direct empirical answer to whether the identity of the ``right'' branch for the hard segment (Section~\ref{sec:v3}) is a fixed property of the router design or depends on the underlying text. It does not transfer --- on Ali-CCP's pseudo-text, V1 (direct task supervision on anonymised template text) wins the hard segment; on Amazon's genuine natural-language text, V2 (ID memorisation plus a weakly-supervised alignment projection) wins it instead. The corrected hybrid matches or beats V2 in every individual cell (V1's cells: long \& seen 0.6061 vs.\ V2's 0.5970, long \& cold 0.4994 vs.\ V2's 0.4877, short \& seen 0.6070 vs.\ V2's 0.5988; the hard-segment cell ties V2 exactly at 0.5173) and beats Baseline overall (0.4944 vs.\ 0.4698). It does \emph{not}, however, beat V2 alone on pooled \texttt{overall} AUC (0.4944 vs.\ 0.5088), despite winning or tying every individual cell against it --- the same pooling effect noted in Table~\ref{tab:amazon-main}'s footnote (hard-segment cells run 46--47\% positive rate vs.\ 12\% for seen cells), not a routing error. Unlike Ali-CCP, where the hybrid's overall AUC (0.5649, Table~\ref{tab:v3-results-aliccp}) cleanly beat every individual model, on Amazon the per-cell breakdown is the number to cite as the router's headline result, not \texttt{overall}. This result is single-seed only and has not been significance-tested; the original, mis-routed run is preserved in the project repository for reference.
+
+\subsection{Dynamic Graph Layer (V4)}
+\label{sec:results-v4}
+
+\begin{table}[h]
+\centering
+\caption{Amazon test AUC: Dynamic Graph layer (V4) and its ID-only ablation, mean $\pm$ std across 5 seeds}
+\label{tab:v4-results}
+\begin{tabular}{lrrr}
+\toprule
+Model & Overall & Seen items & Cold-start items \\
+\midrule
+Baseline (ID, no graph)              & 0.4687 $\pm$ 0.0048 & 0.6150 $\pm$ 0.0054 & 0.5011 $\pm$ 0.0062 \\
+V2 (ID + LLM align, no graph)        & 0.4930 $\pm$ 0.0098 & 0.6177 $\pm$ 0.0119 & 0.5027 $\pm$ 0.0106 \\
+V4-ID-Only (ID + graph, no LLM)      & 0.4637 $\pm$ 0.0095 & 0.6091 $\pm$ 0.0079 & 0.5010 $\pm$ 0.0038 \\
+V4 (ID + LLM align + graph)          & 0.4807 $\pm$ 0.0085 & 0.6207 $\pm$ 0.0129 & 0.5014 $\pm$ 0.0117 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{V4: paired significance tests (5 shared seeds)}
+\label{tab:v4-sig}
+\begin{tabular}{llrrl}
+\toprule
+Comparison & Segment & Mean diff & $p$ & Significant? \\
+\midrule
+Baseline vs.\ V4-ID-Only & Overall & --0.0051 & 0.396 & No \\
+Baseline vs.\ V4-ID-Only & Seen & --0.0058 & 0.341 & No \\
+Baseline vs.\ V4-ID-Only & Cold-start & --0.0000 & 0.995 & No \\
+V4-ID-Only vs.\ V4 & Overall & +0.0171 & 0.061 & No (borderline) \\
+V4-ID-Only vs.\ V4 & Cold-start & +0.0004 & 0.938 & No \\
+\textbf{V2 vs.\ V4} & \textbf{Overall} & \textbf{--0.0123} & \textbf{0.022} & \textbf{Yes (V4 worse)} \\
+V2 vs.\ V4 & Cold-start & --0.0013 & 0.885 & No \\
+V2 vs.\ V4 & Seen & +0.0030 & 0.613 & No \\
+Baseline vs.\ V2 (reference, from Table~\ref{tab:amazon-sig}) & Overall & +0.0243 & 0.0036 & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This is a clean ablation of the two layers V4 combines. The graph mechanism alone, with no LLM signal (Baseline vs.\ V4-ID-Only), produces no detectable improvement over the plain ID baseline on any segment, including cold-start ($p=0.995$) --- the segment this mechanism was specifically expected to help most (Section~\ref{sec:metrics}). Adding LLM alignment on top of the graph mechanism (V4-ID-Only vs.\ V4) trends positive on overall AUC but does not clear significance ($p=0.061$, borderline at $n=5$). Adding the graph mechanism on top of an already-working LLM-alignment model (V2 vs.\ V4) makes things significantly \emph{worse} on overall AUC ($p=0.022$) and has no effect on cold-start. For reference, V2's gain over Baseline \emph{is} significant (bottom row) --- the LLM-alignment layer has a real, replicable effect that the graph aggregator, on this dataset, does not.
+
+The graph mechanism is not simply broken: its learned recency-decay rate converges to $\approx 0.6$ (not collapsed to zero), indicating the attention mechanism is actively using the $\Delta t$ signal rather than ignoring it. The most likely explanation is data sparsity rather than a mechanism failure: per-user history at prediction time has a median of only 1--2 available items among rows that have any history at all, 18.9\% of test rows have zero prior history (a user's first-ever interaction), and 0.0\% of users ever reach the 50-item history cap (Section~\ref{sec:v4}) --- there is little sequential structure in this dataset's density regime for a target-attention aggregator to exploit, regardless of how well the mechanism itself is trained. This is treated as a genuine, reportable negative result for the Dynamic Graph layer specifically, in contrast to the LLM Encoder layer (Section~\ref{sec:results-amazon-main}), not as a target for further tuning against, given the project's time budget (Section~\ref{sec:discussion}).

@@ -1,0 +1,160 @@
+% ============================================================
+% methods_draft.tex
+% LLM-Enhanced Dynamic Graph Networks for CVR Prediction
+% Liu Yize | UCL MSc KIDS
+% Draft (2026-08-08) — restructured Chapter 3 (Methods) content.
+%
+% This supersedes the Methods portion of methods_results_draft.tex.
+% Paste each section below into the corresponding existing section
+% of Chapter 3 in the live Overleaf project (3.1 Data, 3.2 Models,
+% 3.3 Metrics, 3.4 Encoders), replacing/extending what's there now.
+% The matching Results-only content (tables, headline numbers) is in
+% results_draft.tex — do not duplicate numbers across both files if
+% avoidable; where a number is needed here for motivation, it is
+% marked "(see Results X.X)" rather than restated in a table.
+%
+% Addresses supervisor comments from the current draft (Dr. Sinclair,
+% [AS: ...] annotations): "you don't seem to mention the amazon
+% dataset yet" / "I would add it in the dataset section" (3.1),
+% "for what dataset?" on Table 3.1 (3.1.1), "small intro to say how
+% you thought of the versions..." (3.2), "why split into harder/
+% easier segments...what do you expect to work better and why" (3.3),
+% and the empty "3.4 Encoders [AS: todo]" section.
+%
+% Cite with \cite{...} using keys from references.bib (unchanged).
+% ============================================================
+
+\section{Data}
+\label{sec:data}
+
+\subsection{Ali-CCP}
+\label{sec:data-aliccp}
+
+Experiments use the Ali-CCP (Alibaba Click and Conversion Prediction) dataset \cite{ma2018esmm}. Following k-core filtering (item threshold $K_{\text{item}}$, session threshold $K_{\text{session}}=200$), the training pool contains 3.25M rows across 140{,}782 items and 19{,}550 sessions. We use Alibaba's officially provided \texttt{sample\_train}/\texttt{sample\_test} files as the train/test boundary, since the exact partition methodology is not publicly documented and both files are near-identical in size ($\sim$11GB each), ruling out a simple chronological last-day holdout for this release. Within the filtered training pool, a session-level 90/10 split (seed = 42) yields a validation set for early stopping; the official test file is reserved exclusively for final evaluation.
+
+Filtering on the test side is intentionally asymmetric: the item whitelist (140{,}782 items) is inherited from the training vocabulary, while the session threshold is recomputed on the test file's own session-index distribution. Test rows whose item lies outside the training vocabulary are retained (not dropped) and flagged with a binary \texttt{is\_cold\_start\_item} indicator, giving a built-in cold-start evaluation segment: 42.86\% of kept test rows (859{,}828/2{,}006{,}347) are cold-start under this definition. This operational definition of cold-start — an item vocabulary fixed from the training split, with any item outside it flagged, regardless of how the split itself was produced — is used identically for Amazon Reviews'23 (Section~\ref{sec:data-amazon}).
+
+\begin{table}[h]
+\centering
+\caption{Ali-CCP train/validation/test split summary}
+\label{tab:split-summary-aliccp}
+\begin{tabular}{lrrrr}
+\toprule
+Split & Rows & Sessions & Distinct items & CTR / CVR (post-click) \\
+\midrule
+Train       & 2{,}928{,}363 & 17{,}595 & 140{,}092 & 3.2132\% / 0.5208\% \\
+Validation  & 320{,}883     & 1{,}955  & 99{,}902  & 3.2741\% / 0.5901\% \\
+Test        & 2{,}006{,}347 & 7{,}921  & --        & 3.5877\% / 0.4543\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CVR is computed as (purchases among clicked rows) / (clicks) throughout, rather than (all positive-purchase rows) / (clicks) --- the two differ due to a small number of anomalous click=0, purchase=1 rows in the raw data ($<0.05\%$).
+
+\subsubsection{Item and User Pseudo-Text}
+
+Ali-CCP does not expose real item titles, descriptions, or user profiles; every categorical attribute is an anonymised integer feature ID with no published decoder. We empirically profiled the raw field schema (reservoir sampling, cardinality and missingness analysis) and cross-referenced candidate user-side fields against Alibaba's separately published \texttt{user\_profile.csv} schema (from the related Alimama CTR dataset), obtaining high-confidence semantic labels for 8 user demographic fields (micro-segment, segment group, gender, age group, spending power, shopping depth, occupation proxy, city tier) and lower-confidence labels for 4 item-side fields (category, shop, intention node, brand). From these we constructed template ``pseudo-text'' sentences, e.g.\ \textit{``This item's category is category\_8316768, shop is shop\_8385719, brand is brand\_9247244.''} --- real English scaffolding words with out-of-vocabulary numeric identifiers standing in for actual semantic content. This is a known and explicitly flagged limitation of the dataset for this line of experimentation (see Discussion), not a design choice, and directly motivates using a second, real-text dataset (Section~\ref{sec:data-amazon}) to isolate whether later results are an artefact of Ali-CCP's anonymisation specifically.
+
+\subsection{Amazon Reviews'23}
+\label{sec:data-amazon}
+
+To isolate whether the item-representation results obtained on Ali-CCP are a property of its anonymised pseudo-text specifically, or a more general property of the architectures being compared, all of the item-representation variants (Section~\ref{sec:models}) are re-run on Amazon Reviews'23 \cite{hou2024bridging}, a category-partitioned e-commerce review dataset with genuine natural-language item metadata (title, store, category, features, description). Unlike Ali-CCP, Amazon Reviews'23 carries genuine per-second interaction timestamps, which additionally makes it the only dataset in this dissertation on which a temporal/sequential model (Section~\ref{sec:v4}) can be evaluated at all.
+
+Positive interactions are \texttt{verified\_purchase} reviews (the closest analogue to Ali-CCP's purchase signal available in this dataset); negatives are sampled uniformly from the item catalog (4 per positive), excluding items the user has already interacted with --- this dataset provides no natural non-interaction signal the way Ali-CCP provides real non-clicks. A real chronological train/validation/test split (80/10/10 by time) is used, rather than Ali-CCP's non-temporal official partition. An \texttt{is\_cold\_start\_item} flag is built from the train-only item vocabulary, matching Ali-CCP's convention (Section~\ref{sec:data-aliccp}).
+
+An initial attempt used the \texttt{Digital\_Music} category (101.0K users, 70.5K items, 130.4K ratings) for its small footprint, deliberately chosen to respect a dataset-volume constraint. Its verified-purchase interaction graph proved too sparse to be usable: mean interactions per entity were only 1.2--1.9, and iterative $k$-core filtering collapsed to zero rows at $k=5$ (the Amazon Reviews'23 release's own aggregate-scale convention) and to only 4{,}160 rows even at $k=2$ --- too few for either model to learn signal above chance (test AUC 0.49--0.51 for both). We switched to \texttt{Video\_Games} (2.8M users, 137.2K items, 4.6M ratings), which has $\sim$33.5 ratings/item on average versus Digital\_Music's $\sim$1.9, giving substantially more collaborative signal, while capping dataset volume by randomly sampling 150{,}000 whole users (preserving each sampled user's full interaction history, rather than sampling rows, which would have reintroduced the sparsity problem) before $k$-core filtering. The final dataset ($k=2$-core: 99{,}281 rows / 32{,}039 users / 13{,}720 items) is two orders of magnitude smaller than Amazon Reviews'23's largest categories.
+
+\begin{table}[h]
+\centering
+\caption{Amazon Reviews'23 (Video\_Games) train/validation/test split summary}
+\label{tab:split-summary-amazon}
+\begin{tabular}{lrrr}
+\toprule
+Split & Rows & Distinct users & Distinct items \\
+\midrule
+Train       & 397{,}125 & \multirow{3}{*}{32{,}039} & \multirow{3}{*}{13{,}720} \\
+Validation  & 49{,}640  & & \\
+Test        & 49{,}640  & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Reproducibility limitation.} A negative-sampling non-determinism bug was found and fixed during this project (a Python set-to-list conversion whose iteration order depends on per-process hash randomisation, not just the fixed random seed) --- see Section~\ref{sec:metrics-multiseed} for how this was discovered and Appendix~\ref{app:results} for the fix. The already-completed Baseline/V1/V2/V3-Hybrid results reported in Chapter~\ref{ch:results} predate the fix; the drift this causes is small (cold-start rate moves by $\sim$0.1--0.3 percentage points; row counts and positive rate are unaffected) and does not change any conclusion, but the fixed, deterministic version of the dataset is the one used for the Dynamic Graph model (Section~\ref{sec:v4}), a documented rather than silent inconsistency between the two rounds of experiments.
+
+\subsection{Context-Length Segmentation}
+\label{sec:context-segments}
+
+Beyond the seen/cold-start split (Section~\ref{sec:metrics}), test rows on both datasets are further segmented by the length of context available at prediction time, crossed with cold-start status, to test whether any single model is uniformly best or whether different regimes favour different item representations. On Ali-CCP, each test session is split into long-context and short-context halves by its median interaction count, giving four cells (long/short $\times$ seen/cold-start) of sizes 1{,}012{,}202 (long) and 994{,}145 (short) test rows respectively. On Amazon, the same idea is applied to each user's combined train+val+test interaction count, split at the median (median = 15); a train-only count was tried first but degenerates to a median of 0, since 59.7\% of Amazon's chronologically-split test users have zero training-period rows. This segmentation is what Section~\ref{sec:v3}'s hybrid router and Section~\ref{sec:v4}'s history-aggregation model both build on, and its results are reported in Chapter~\ref{ch:results}.
+
+\section{Models}
+\label{sec:models}
+
+All models share an ESMM-style (Entire Space Multi-task Model) two-tower architecture \cite{ma2018esmm}: a shared representation for user and item feeds separate CTR and CVR MLP towers ($[128, 64]$ hidden units), trained jointly via
+\[
+\mathcal{L} = \text{BCE}(\hat{p}_{\text{ctr}}, y_{\text{click}}) + \text{BCE}(\hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}, y_{\text{purchase}})
+\]
+over the entire impression space, avoiding the sample selection bias of training CVR only on clicked rows.\footnote{On Amazon, which has no separate click/purchase funnel, the same two-tower backbone and BCE loss are used for the single binary interaction-prediction task, dropping the CTCVR product term.} The remaining design space is how the user/item representation itself is constructed, and the six variants below (Baseline, V1, V1-Full, V2, V3, V4) were arrived at incrementally, each motivated by a specific gap the previous variant's results exposed rather than specified upfront as a fixed ablation grid.
+
+The starting point is two competing patterns from the sequential/LLM-recommendation literature for injecting text into an ID-based recommender: UniSRec's \cite{hou2022unisrec} \emph{REPLACE} pattern, which substitutes a frozen text embedding directly for the learned ID embedding, and RLMRec's \cite{ren2024rlmrec} \emph{ALIGN} pattern, which keeps the learned ID embedding and uses text only as an auxiliary contrastive signal pulling it toward a semantically meaningful geometry. Baseline, V1, and V1-Full instantiate REPLACE (with and without the user side also replaced, to separate the two); V2 instantiates ALIGN. V3 and V4 are not from the literature in the same direct sense: V3 is a post-hoc architectural response to a specific empirical finding (Section~\ref{sec:v3}) rather than a design chosen in advance, and V4 is a deliberately scoped-down implementation of DGSR \cite{zhang2022dgsr}, reduced in the ways Section~\ref{sec:v4} describes to fit the project's time budget.
+
+\begin{description}
+  \item[Baseline (ID embedding).] Standard learned \texttt{nn.Embedding} tables for user\_id and item\_id, with index 0 reserved as a zero-vector UNK for out-of-vocabulary entities (\texttt{padding\_idx=0}).
+  \item[V1 (item-only text replace).] Item-side embedding replaced with a frozen sentence embedding of the item's pseudo-text (Section~\ref{sec:encoders}) passed through a trainable adapter (Linear(384,128) $\to$ ReLU $\to$ Dropout $\to$ Linear(128,32)). User side unchanged (learned ID embedding). Follows the UniSRec \cite{hou2022unisrec} REPLACE pattern.
+  \item[V1-Full (item + user text replace).] As V1, but the user-side embedding is also replaced with a frozen embedding of the user's demographic pseudo-text plus a separate trainable adapter, removing the user-side UNK fallback entirely. Included to separate "does replacing item representations help" from "does replacing user representations help" — Chapter~\ref{ch:results} shows these are not symmetric.
+  \item[V2 (ID + LLM alignment).] Keeps \emph{both} learned ID embeddings (as in Baseline), and adds a symmetric InfoNCE contrastive loss ($\lambda = 0.1$) pulling the item's ID embedding toward a trainable projection of its frozen pseudo-text embedding. The trained projection head is reused at inference time as a substitute representation for cold-start items, replacing the zero-vector UNK fallback. Follows the RLMRec \cite{ren2024rlmrec} ALIGN pattern.
+\end{description}
+
+\subsection{Hybrid Segment Routing (V3)}
+\label{sec:v3}
+
+V1 and V2's item representations differ in a way that matters specifically for cold-start items: V2 keeps a learned \texttt{item\_emb} for in-vocabulary items and a trainable projection of the frozen text embedding, \texttt{item\_llm\_proj}, for out-of-vocabulary (cold-start) items, but \texttt{item\_llm\_proj} only ever receives gradient through the contrastive alignment loss --- a proxy objective pulling it toward the geometry of \emph{other, warm} items' ID embeddings --- because every training-batch item is by construction in-vocabulary, so the main CTR/CVR loss never reaches the cold-start branch during training. V1's item representation, by contrast, is identically text-derived for every item, warm or cold, and is directly supervised by the CTR/CVR loss on every training row. The hypothesis this motivates: direct task supervision should transfer to an unseen item's text better than a proxy alignment objective does, so V1 should be the stronger model specifically on cold-start items, while V2 should remain stronger on seen items, where its fully free-form, high-capacity \texttt{item\_emb} is not something V1 has access to at all. Chapter~\ref{ch:results} tests this directly via the context-length $\times$ cold-start segmentation of Section~\ref{sec:context-segments} and confirms it: on both datasets there is a specific hard segment where V1 beats V2, and this is exactly the segment the hypothesis predicts.
+
+This motivates V3, a hybrid: a deterministic router over the already-trained V1 and V2 checkpoints (no new training, no threshold tuned against test performance --- the rule is the segment definition itself, fixed independently of test AUC):
+\[
+\text{prediction} =
+\begin{cases}
+  \text{V1's prediction} & \text{if the row is in the hard segment} \\
+  \text{V2's prediction} & \text{otherwise}
+\end{cases}
+\]
+with $\hat{p}_{\text{ctr}}$, $\hat{p}_{\text{cvr}}$, and $\hat{p}_{\text{ctcvr}}$ all routed together per row from the same source model, keeping $\hat{p}_{\text{ctcvr}} = \hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}$ internally consistent. On Ali-CCP the hard segment is short-context \& cold-start; on Amazon it is the same definition, but --- as Chapter~\ref{ch:results} reports --- the winning branch in that cell is the opposite one, a dataset-dependent flip that is itself one of this dissertation's findings.
+
+V1 and V2 are trained completely independently (different loss surfaces, different sigmoid calibration), so there is no guarantee in general that swapping in one model's raw probability output for a subset of rows preserves a sane global ranking. Whether it does, on each dataset, is an empirical question answered in Chapter~\ref{ch:results}, not a property this design guarantees. A production or probability-sensitive use of this routing rule would need explicit calibration (e.g.\ per-segment Platt scaling) before deployment, which is not implemented here.
+
+\subsection{Dynamic Graph Layer (V4)}
+\label{sec:v4}
+
+Baseline, V1, V1-Full, V2, and V3 are all static two-tower models: they differ only in how a single item's representation is constructed, and none of them aggregate information over a user's interaction \emph{history}. V4 is the first model in this dissertation that does, and is accordingly the only model that tests the dissertation's "Dynamic Graph" claim directly. It is evaluated on Amazon only, since Ali-CCP has no per-interaction timestamps and therefore no way to construct a causally-ordered history (Section~\ref{sec:data-amazon}).
+
+\paragraph{Scope reduction relative to DGSR.} V4 is a deliberately reduced implementation of DGSR \cite{zhang2022dgsr}, not a full reproduction, chosen given the project's roughly one-month remaining timeline. DGSR models each interaction as an edge quintuple $(u, i, t, o_u, o_i)$ and maintains dual long-term/short-term attention channels that evolve \emph{both} user and item representations. V4 instead uses a single-channel target-attention mechanism --- query = the target item's representation, keys/values = the user's prior interacted items' representations --- in the spirit of DIN's target-attention \cite{zhou2018din} rather than DGSR's dual channels, and evolves only the user side; item-side history aggregation is left as future work. In place of DGSR's explicit order-position features $(o_u, o_i)$, V4 uses the real elapsed time $\Delta t$ directly (available on Amazon, never available on Ali-CCP) via a learned recency-decay bias:
+\[
+\text{score}_j = \frac{q \cdot k_j}{\sqrt{d}} - \text{softplus}(w_{\text{decay}}) \cdot \log(1 + \Delta t_j)
+\]
+where $q$ is the target item's representation, $k_j$ the $j$-th history item's representation, and $\Delta t_j$ the elapsed time in days since that history item was interacted with; scores are masked to the user's actual (padded, causally truncated) history before a softmax produces the attention weights. $w_{\text{decay}}$ is a single learned scalar (softplus-constrained to be non-negative), not a fixed hyperparameter.
+
+\paragraph{Causal history construction.} For a given row with user $u$ and timestamp $t$, the history is the set of $u$'s prior \emph{positive} (real, label=1) interactions with timestamp strictly less than $t$ --- negative (sampled) rows are never eligible to appear in another row's history, and a row's own negative-sampling counterpart shares its paired positive's timestamp rather than generating a separate history entry. History is truncated to the most recent 50 items; a user with zero eligible prior interactions (the first-ever interaction for that user, at that point in time) receives an all-zero, fully-masked history, and the model falls back to the user embedding alone for that row --- the same UNK-style fallback convention used elsewhere in this dissertation for missing signal, rather than a special case.
+
+\paragraph{Combining with the LLM-alignment pattern.} V4 combines the graph aggregator with V2's ID+LLM alignment pattern (Section~\ref{sec:models}) from the start, applying V2's exact item-representation and alignment-loss logic to both the target item and every history item, rather than first building an ID-only version and adding LLM alignment afterward. This was a deliberate choice given the time budget: a rough combined result that tests the full three-layer architecture (LLM Encoder + Dynamic Graph) end-to-end was judged more informative than a slower, more polished single-axis ablation. A pure-ID ablation, \textbf{V4-ID-Only}, using the identical temporal-attention mechanism but a plain learned item embedding table (no LLM branch, no alignment loss) in place of V4's LLM-aligned item representation, was built as a natural follow-up once the combined model's results were in, to isolate the graph mechanism's own contribution from the already-established contribution of LLM alignment (V2). Both V4 and V4-ID-Only are trained and evaluated identically to the other Amazon models (Section~\ref{sec:metrics-multiseed}); results for both, and what the comparison against V2 and Baseline reveals, are in Chapter~\ref{ch:results}.
+
+\section{Metrics}
+\label{sec:metrics}
+
+The primary metric throughout is AUC (CTCVR-AUC on Ali-CCP, task-appropriate given its two-stage funnel; plain AUC on Amazon's single binary task), computed once overall and once each on the seen-item and cold-start-item subsets defined in Section~\ref{sec:data-aliccp}/\ref{sec:data-amazon}.
+
+\paragraph{Why split by seen vs.\ cold-start at all.} The two segments are expected, a priori, to favour different kinds of representation. A learned ID embedding can only encode information about an item by memorising patterns from that item's own training-set interactions; for a genuinely unseen (cold-start) item this is structurally impossible; no amount of training data helps, since the item was never in it. Text- or graph-derived representations, by contrast, are computed from information available at inference time regardless of whether the item was seen during training (the item's own description, or a user's history of \emph{other} items), so they are the only signal that can, in principle, generalise to cold-start items at all. The seen/cold-start split is therefore not an arbitrary evaluation slice but the operationalisation of this dissertation's central question: an LLM- or graph-based representation is expected to help more, if it helps at all, on cold-start items specifically, while a pure ID embedding is expected to remain competitive or better on seen items, where memorisation is available to it and generalisation is not required. Reporting only the overall/pooled AUC would risk masking exactly this effect --- and Chapter~\ref{ch:results} shows this masking is not hypothetical: several results (the V3 routing crossover, Amazon's pooled-AUC anomalies) are only visible once the pooled metric is decomposed by segment.
+
+\subsection{Multi-Seed Evaluation and Significance Testing}
+\label{sec:metrics-multiseed}
+
+All headline model comparisons (Baseline, V1, V1-Full, V2, and V4/V4-ID-Only where applicable) are re-run under 5 fixed seeds (42, 123, 2026, 7, 99), varying only training-process randomness (weight initialisation, minibatch order, dropout masks) with the train/validation/test split itself held fixed, and reported as mean $\pm$ standard deviation across seeds. Differences between models are tested for significance with a paired $t$-test (\texttt{scipy.stats.ttest\_rel}) across the 5 shared seeds.
+
+This is a deliberate departure from literal $k$-fold cross-validation, which would re-partition the data $k$ different ways. Both datasets' \texttt{is\_cold\_start\_item} flag (Section~\ref{sec:data-aliccp}) is defined relative to a fixed train/test item split: an item is cold-start if and only if it does not appear in the training vocabulary. Re-partitioning the data, as $k$-fold CV does, would make a given item cold-start in one fold and warm in another, destroying the very segment definition every result in this dissertation is built around. Holding the split fixed and varying only the seed isolates the source of variance this dissertation actually needs to quantify --- how much does training-process randomness alone move a result --- without that confound.
+
+The V3-Hybrid router (Section~\ref{sec:v3}) and the Ali-CCP/Amazon context-length segmentation (Section~\ref{sec:context-segments}) are evaluated at a single seed (42) only, since they are deterministic post-hoc combinations of already-trained checkpoints with no independent training randomness of their own to average over; this is noted explicitly wherever their results are reported, and no significance test is claimed for them.
+
+\section{Encoders}
+\label{sec:encoders}
+
+All frozen-text-embedding results reported by default (V1, V1-Full, V2, V3, V4) use \texttt{all-MiniLM-L6-v2} \cite{reimers2019sbert} (22M parameters, 384-dim) as a fast first-pass sentence encoder. To test whether encoder capacity, rather than the underlying pseudo-text's quality, was a binding constraint on the LLM-integrated variants' results, V2 --- chosen as the base for this comparison because it is the only LLM-integrated variant competitive with the ID baseline on Ali-CCP, making it the more informative test of encoder quality specifically --- was re-run with the frozen encoder swapped for \texttt{all-mpnet-base-v2} \cite{song2020mpnet} (109M parameters, 768-dim), otherwise identical architecture, hyperparameters, and $\lambda_{\text{align}}=0.1$, not re-tuned per encoder. The two encoders differ substantially in parameter count, embedding dimensionality, and pretraining objective (MiniLM: distilled, contrastively-trained; MPNet: a larger masked-and-permuted-pretraining backbone fine-tuned for sentence embeddings), representing a meaningfully different point on the capacity/cost trade-off rather than a marginal variant.
+
+BGE, E5, GTE, and EmbeddingGemma were shortlisted as further candidates during planning but not implemented, once the MPNet result (Chapter~\ref{ch:results}) was in. XLNet \cite{yang2019xlnet} was also named as a candidate in supervisor discussion, but is an autoregressive permutation-language-model backbone rather than a model pretrained with a sentence-embedding (Siamese/contrastive) objective; using it as a sentence encoder without first fine-tuning it as an SBERT-style bi-encoder would likely understate its true representational quality relative to the models above, so it was deprioritised in favour of MPNet as the fairer like-for-like comparison point.
