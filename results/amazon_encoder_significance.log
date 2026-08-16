@@ -1,0 +1,13 @@
+Amazon MiniLM vs MPNet, paired significance tests (5 shared seeds: 42, 123, 2026, 7, 99)
+Generated 2026-08-16, run locally on Mac after closing the Amazon-MPNet coverage gap.
+
+=== V1 (text-replace): MPNet vs MiniLM ===
+test_overall              n=5 mean_diff(mpnet-minilm)=+0.0542 t=-13.81 p=0.0002 significant=YES
+test_seen_items           n=5 mean_diff(mpnet-minilm)=-0.0232 t=3.61 p=0.0225 significant=YES
+test_cold_start_items     n=5 mean_diff(mpnet-minilm)=+0.0386 t=-15.41 p=0.0001 significant=YES
+
+=== V2 (align): MPNet vs MiniLM ===
+test_overall              n=5 mean_diff(mpnet-minilm)=-0.0105 t=2.23 p=0.0892 significant=no
+test_seen_items           n=5 mean_diff(mpnet-minilm)=+0.0019 t=-0.34 p=0.7491 significant=no
+test_cold_start_items     n=5 mean_diff(mpnet-minilm)=+0.0006 t=-0.06 p=0.9528 significant=no
+

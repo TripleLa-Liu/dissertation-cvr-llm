@@ -87,7 +87,9 @@ import pandas as pd
 
 CATEGORY = "Video_Games"
 
-WORK_DIR = r"D:\Study\migration_package\processed_data"
+# Local Mac run (2026-08-15, Amazon MPNet gap) — see amazon_download.py.
+WORK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                         "migration_package", "processed_data")
 AMAZON_DIR = os.path.join(WORK_DIR, "amazon")
 RAW_DIR = os.path.join(AMAZON_DIR, "raw")
 PROCESSED_DIR = os.path.join(AMAZON_DIR, "processed")

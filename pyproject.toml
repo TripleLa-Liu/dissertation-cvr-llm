@@ -1,0 +1,16 @@
+[project]
+name = "dissertation-cvr-llm"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub>=1.27.0",
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.18.0",
+    "sentence-transformers>=5.7.0",
+    "torch>=2.13.0",
+    "torch-geometric>=2.8.0.post1",
+    "transformers>=5.15.0",
+]

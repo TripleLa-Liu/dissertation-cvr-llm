@@ -149,9 +149,9 @@ V2 (ID+align)                & \textbf{0.4930} $\pm$ 0.0098 & \textbf{0.6177} $\
 \toprule
 Comparison & Segment & Mean diff & $p$ & Significant? \\
 \midrule
-Baseline vs.\ V1 & Overall\footnotemark & --0.0509 & $<$0.0001 & Yes \\
-Baseline vs.\ V2 & Overall\footnotemark & +0.0243 & 0.0036 & Yes \\
-V1 vs.\ V2       & Overall\footnotemark & +0.0752 & $<$0.0001 & Yes \\
+Baseline vs.\ V1 & Overall\footnotemark\label{fn:amazon-sig-overall} & --0.0509 & $<$0.0001 & Yes \\
+Baseline vs.\ V2 & Overall\footnotemark[\ref{fn:amazon-sig-overall}] & +0.0243 & 0.0036 & Yes \\
+V1 vs.\ V2       & Overall\footnotemark[\ref{fn:amazon-sig-overall}] & +0.0752 & $<$0.0001 & Yes \\
 Baseline vs.\ V1 & Cold-start & --0.0066 & 0.172 & No \\
 Baseline vs.\ V2 & Cold-start & +0.0016 & 0.589 & No \\
 V1 vs.\ V2       & Cold-start & +0.0082 & 0.257 & No \\
@@ -162,6 +162,52 @@ Baseline vs.\ V2 & Seen & +0.0027 & 0.676 & No \\
 \footnotetext{Significant on the confounded pooled metric only (see previous footnote) --- since none of the corresponding seen/cold-start subgroup differences are themselves significant, these overall-AUC gaps most likely reflect each model's score distribution interacting with the segment positive-rate mismatch, not a genuine ranking-quality difference. Not cited as evidence of a real Baseline/V1/V2 gap in Section~\ref{sec:discussion}.}
 
 Both Baseline and V2 learn real signal on seen items ($\sim$0.61--0.62 AUC, well above chance); all three models are close to chance on cold-start items ($\sim$0.49--0.50), and none of the pairwise cold-start differences reach significance. V1 (REPLACE) is the weakest model on every segment, reproducing --- now with 5-seed confirmation rather than a single run --- the Ali-CCP finding that naively substituting a frozen text embedding for a learned item ID embedding underperforms keeping the ID embedding, even with genuine natural-language item text (Section~\ref{sec:discussion}).
+
+\subsection{Encoder Capacity: MiniLM vs.\ MPNet}
+\label{sec:results-amazon-encoders}
+
+The same MiniLM-vs-MPNet swap tested on Ali-CCP (Section~\ref{sec:results-encoders}) was repeated on Amazon for the two variants that admit it, V1 (REPLACE) and V2 (ALIGN), each at 5 seeds.
+
+\begin{table}[h]
+\centering
+\caption{Amazon test AUC: MiniLM (384-dim) vs.\ MPNet (768-dim), mean $\pm$ std across 5 seeds}
+\label{tab:amazon-mpnet-vs-minilm}
+\begin{tabular}{lrrr}
+\toprule
+Model & Overall\footnotemark & Seen items & Cold-start items \\
+\midrule
+V1 -- MiniLM & 0.4178 $\pm$ 0.0025 & 0.6047 $\pm$ 0.0064 & 0.4945 $\pm$ 0.0035 \\
+V1 -- MPNet  & 0.4721 $\pm$ 0.0074 & 0.5815 $\pm$ 0.0190 & 0.5331 $\pm$ 0.0078 \\
+V2 -- MiniLM & 0.4930 $\pm$ 0.0098 & 0.6177 $\pm$ 0.0119 & 0.5027 $\pm$ 0.0106 \\
+V2 -- MPNet  & 0.4825 $\pm$ 0.0047 & 0.6196 $\pm$ 0.0044 & 0.5033 $\pm$ 0.0123 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\footnotetext{See Table~\ref{tab:amazon-main}'s footnote: \texttt{overall} pools segments with very different positive rates and is not the primary comparison.}
+
+\begin{table}[h]
+\centering
+\caption{Amazon MiniLM vs.\ MPNet: paired significance tests (5 shared seeds)}
+\label{tab:amazon-encoder-sig}
+\begin{tabular}{llrrl}
+\toprule
+Model & Segment & Mean diff (MPNet $-$ MiniLM) & $p$ & Significant? \\
+\midrule
+V1 & Overall     & +0.0542 & 0.0002 & Yes \\
+V1 & Seen        & --0.0232 & 0.0225 & Yes (MPNet worse) \\
+V1 & Cold-start  & +0.0386 & 0.0001 & Yes \\
+V2 & Overall     & --0.0105 & 0.089 & No \\
+V2 & Seen        & +0.0019 & 0.749 & No \\
+V2 & Cold-start  & +0.0006 & 0.953 & No \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Unlike Ali-CCP, where no MiniLM-vs-MPNet difference reached significance for any variant (Section~\ref{sec:results-encoders}), the encoder swap has a real, replicable effect on Amazon's V1 (REPLACE) --- but not a uniformly positive one: MPNet significantly improves both overall AUC ($p=0.0002$) and, more importantly given the pooling caveat, the cold-start segment ($p=0.0001$), while significantly \emph{hurting} the seen-items segment ($p=0.0225$). A plausible reading follows from V1's design (Section~\ref{sec:models}): V1 has no learned ID embedding at all, so its item representation is entirely the frozen text embedding passed through a small trainable adapter --- the encoder's raw representational quality is not a secondary signal here, it is the only signal. MPNet's larger, generally stronger general-purpose embedding space transfers better to items the adapter never trained on directly (cold-start), consistent with the cold-start gain; but with a fixed adapter capacity and epoch budget, that same higher-dimensional space is apparently harder to compress into a maximally discriminative representation for items the model \emph{does} get to memorise (seen), consistent with the seen-item regression. This is a capacity/compression trade-off, not a strict improvement.
+
+V2 (ALIGN) shows no significant difference on any segment ($p=0.089$--$0.953$), matching the Ali-CCP V2 result exactly. The likely explanation is the same one given there and in Section~\ref{sec:v3}: V2's text embedding only ever receives gradient through the contrastive alignment loss, never the main CTR/CVR loss, so a better encoder has a weaker causal path to improved predictions than it does under V1's direct supervision.
+
+Read together with Section~\ref{sec:results-encoders}, this is the only encoder-capacity comparison across both datasets that produces a significant effect, and it appears specifically for the REPLACE pattern (V1) on the dataset with genuine natural-language item text (Amazon), not for ALIGN (V2) on either dataset, nor for REPLACE on Ali-CCP's anonymised pseudo-text. This is consistent with REPLACE variants being more sensitive to encoder quality than ALIGN variants by construction --- REPLACE substitutes the text embedding as the item's \emph{only} representation, while ALIGN only recruits it for a secondary regularising loss and a cold-start fallback --- but the seen-item regression means this sensitivity is not simply "bigger encoder, better model"; at $n=5$ seeds the practical takeaway is that encoder choice is a real design decision for REPLACE-style integration on datasets with genuine text, not a free upgrade.
 
 \subsection{Hybrid Segment Routing (V3)}
 \label{sec:results-v3-amazon}

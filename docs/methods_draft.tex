@@ -93,9 +93,55 @@ All models share an ESMM-style (Entire Space Multi-task Model) two-tower archite
 \[
 \mathcal{L} = \text{BCE}(\hat{p}_{\text{ctr}}, y_{\text{click}}) + \text{BCE}(\hat{p}_{\text{ctr}} \cdot \hat{p}_{\text{cvr}}, y_{\text{purchase}})
 \]
-over the entire impression space, avoiding the sample selection bias of training CVR only on clicked rows.\footnote{On Amazon, which has no separate click/purchase funnel, the same two-tower backbone and BCE loss are used for the single binary interaction-prediction task, dropping the CTCVR product term.} The remaining design space is how the user/item representation itself is constructed, and the six variants below (Baseline, V1, V1-Full, V2, V3, V4) were arrived at incrementally, each motivated by a specific gap the previous variant's results exposed rather than specified upfront as a fixed ablation grid.
+over the entire impression space, avoiding the sample selection bias of training CVR only on clicked rows.\footnote{On Amazon, which has no separate click/purchase funnel, the same two-tower backbone and BCE loss are used for the single binary interaction-prediction task, dropping the CTCVR product term.} The remaining design space is how the user/item representation itself is constructed, and the seven variants below (Baseline, V1, V1-Full, V2, V3, V4, V4-ID-Only) were arrived at incrementally, each motivated by a specific gap the previous variant's results exposed rather than specified upfront as a fixed ablation grid.
 
 The starting point is two competing patterns from the sequential/LLM-recommendation literature for injecting text into an ID-based recommender: UniSRec's \cite{hou2022unisrec} \emph{REPLACE} pattern, which substitutes a frozen text embedding directly for the learned ID embedding, and RLMRec's \cite{ren2024rlmrec} \emph{ALIGN} pattern, which keeps the learned ID embedding and uses text only as an auxiliary contrastive signal pulling it toward a semantically meaningful geometry. Baseline, V1, and V1-Full instantiate REPLACE (with and without the user side also replaced, to separate the two); V2 instantiates ALIGN. V3 and V4 are not from the literature in the same direct sense: V3 is a post-hoc architectural response to a specific empirical finding (Section~\ref{sec:v3}) rather than a design chosen in advance, and V4 is a deliberately scoped-down implementation of DGSR \cite{zhang2022dgsr}, reduced in the ways Section~\ref{sec:v4} describes to fit the project's time budget.
+
+With seven named variants in play, Table~\ref{tab:variant-config} first fixes exactly what distinguishes each one architecturally, before the prose descriptions below motivate each in turn; Table~\ref{tab:variant-coverage} then fixes exactly which dataset/encoder combinations each variant was evaluated on, and why the matrix is not fully square.
+
+\begin{table}[h]
+\centering
+\caption{Model variant architectural configuration}
+\label{tab:variant-config}
+\begin{tabular}{lp{3.1cm}p{3.1cm}p{2.1cm}p{2.4cm}}
+\toprule
+Variant & Item representation & User representation & Alignment loss & History aggregation \\
+\midrule
+Baseline & learned ID embedding & learned ID embedding & --- & --- \\
+V1 & frozen text embedding + adapter & learned ID embedding & --- & --- \\
+V1-Full & frozen text embedding + adapter & frozen text embedding + adapter & --- & --- \\
+V2 & learned ID embedding (frozen-text projection for cold-start items) & learned ID embedding & InfoNCE (item) & --- \\
+V3-Hybrid & \multicolumn{3}{l}{deterministic per-row router over V1's and V2's already-trained outputs (Section~\ref{sec:v3}); no independent representation of its own} & --- \\
+V4 & as V2, applied to the target item and every history item & learned ID embedding & InfoNCE (item) & target-attention, learned $\Delta t$-decay \\
+V4-ID-Only & learned ID embedding & learned ID embedding & --- & target-attention, learned $\Delta t$-decay \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Model variant evaluation coverage, by dataset and encoder}
+\label{tab:variant-coverage}
+\begin{tabular}{lcccc}
+\toprule
+Variant & Ali-CCP, MiniLM & Ali-CCP, MPNet & Amazon, MiniLM & Amazon, MPNet \\
+\midrule
+Baseline   & 5 seeds & n/a (a) & 5 seeds & n/a (a) \\
+V1         & 5 seeds & 5 seeds & 5 seeds & 5 seeds \\
+V1-Full    & 5 seeds & 5 seeds & n/a (b) & n/a (b) \\
+V2         & 5 seeds & 5 seeds & 5 seeds & 5 seeds \\
+V3-Hybrid  & 1 seed & not run (c) & 1 seed & not run (c) \\
+V4 / V4-ID-Only & n/a (d) & n/a (d) & 5 seeds & not run (c) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{description}
+  \item[(a)] Baseline has no text pathway, so the choice of sentence encoder does not apply to it.
+  \item[(b)] V1-Full requires a user-side pseudo-text source; Ali-CCP's demographic fields (Section~\ref{sec:data-aliccp}) supply this, but Amazon Reviews'23 provides no comparable user profile text, only interaction history --- which V4's history aggregator uses instead. This is a structural gap in the source data, not an omitted run.
+  \item[(c)] V3-Hybrid and V4 are single-dataset by construction: V3-Hybrid routes over already-trained V1/V2 checkpoints for one dataset's context-length segmentation (Section~\ref{sec:context-segments}), and V4 requires interaction timestamps, which only Amazon provides (Section~\ref{sec:data-amazon}). Neither has a natural counterpart on the other encoder/dataset combination to run.
+  \item[(d)] V4 is evaluated on Amazon only, since Ali-CCP carries no per-interaction timestamps and therefore admits no causally-ordered history (Section~\ref{sec:v4}).
+\end{description}
 
 \begin{description}
   \item[Baseline (ID embedding).] Standard learned \texttt{nn.Embedding} tables for user\_id and item\_id, with index 0 reserved as a zero-vector UNK for out-of-vocabulary entities (\texttt{padding\_idx=0}).
